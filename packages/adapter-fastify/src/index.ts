@@ -1,0 +1,1 @@
+export { OrquestraAdapterFastify } from "./lib";

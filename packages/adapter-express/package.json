@@ -1,0 +1,45 @@
+{
+	"name": "@orquestra/adapter-express",
+	"version": "0.0.0",
+	"main": "dist/index.cjs.js",
+	"module": "dist/index.esm.js",
+	"license": "MIT",
+	"files": ["dist"],
+	"types": "dist/index.d.ts",
+	"author": {
+		"email": "contato@gabrieljs.dev",
+		"name": "Gabriel de Jesus Silva",
+		"url": "https://gabrieljs.dev"
+	},
+	"scripts": {
+		"prebuild": "rimraf -g dist",
+		"build": "rollup -c"
+	},
+	"devDependencies": {
+		"@rollup/plugin-alias": "^5.1.1",
+		"@rollup/plugin-commonjs": "^26.0.1",
+		"@rollup/plugin-json": "^6.1.0",
+		"@rollup/plugin-node-resolve": "^15.2.3",
+		"@rollup/plugin-typescript": "^11.1.6",
+		"@types/express": "^5.0.3",
+		"@types/node": "^20.14.11",
+		"@types/supertest": "^6.0.3",
+		"reflect-metadata": "^0.2.2",
+		"rimraf": "^6.0.1",
+		"rollup": "^4.19.0",
+		"supertest": "^6.3.4",
+		"tslib": "^2.6.3",
+		"typescript": "^5.5.3"
+	},
+	"dependencies": {
+		"@orquestra/core": "^0.0.0",
+		"@types/supertest": "^6.0.3",
+		"express": "^5.1.0"
+	},
+	"peerDependencies": {
+		"express": "^5.1.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

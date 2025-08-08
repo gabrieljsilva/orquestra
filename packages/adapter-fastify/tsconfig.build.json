@@ -1,0 +1,13 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"rootDir": "../",
+		"outDir": "./dist",
+		"typeRoots": ["../core/src/lib/types", "../../node_modules/@types"],
+		"skipLibCheck": true,
+		"types": [],
+		"forceConsistentCasingInFileNames": true,
+		"strict": false
+	},
+	"include": ["src/**/*", "../core/src/**/*"]
+}

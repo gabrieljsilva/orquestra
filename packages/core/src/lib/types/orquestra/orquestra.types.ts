@@ -1,0 +1,44 @@
+import { LoadEnvOptions } from "../../helpers/env";
+import { Logger } from "../../internal/logger";
+import { ContainerProvider, HelperProvider, PluginProvider, ServiceProvider } from "../components";
+import { IHttpServerAdapter } from "../http-server";
+import { IIocContainer } from "../ioc";
+
+export interface IOrquestraContext {
+	container: IIocContainer;
+
+	// Injectable components
+	httpServer?: IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>);
+	plugins: Array<PluginProvider>;
+	helpers: Array<HelperProvider>;
+	containers: Array<ContainerProvider>;
+	services: Array<ServiceProvider>;
+
+	// Registration methods
+	registerHttpServer(httpServer: IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>)): void;
+	registerPlugins(plugins: Array<PluginProvider>): void;
+	registerHelpers(helpers: Array<HelperProvider>): void;
+	registerContainers(containers: Array<ContainerProvider>): void;
+	registerServices(services: Array<ServiceProvider>): void;
+
+	// Getter methods
+	getHttpServer(): IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>) | undefined;
+	getPluginProviders(): Array<PluginProvider>;
+	getHelperProviders(): Array<HelperProvider>;
+	getContainerProviders(): Array<ContainerProvider>;
+	getServiceProviders(): Array<ServiceProvider>;
+}
+
+export interface OrquestraOptions {
+	httpServer?: IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>);
+	plugins?: Array<PluginProvider>;
+	helpers?: Array<HelperProvider>;
+	containers?: Array<ContainerProvider>;
+	services?: Array<ServiceProvider>;
+	env?: LoadEnvOptions;
+	logger?: Logger;
+}
+
+export interface OrquestraBootstrapOptions {
+	skipContainers?: boolean;
+}

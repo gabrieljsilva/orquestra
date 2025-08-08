@@ -1,0 +1,43 @@
+{
+	"name": "orquestra-monorepo",
+	"version": "0.0.0",
+	"private": true,
+	"workspaces": [
+		"packages/core",
+		"packages/adapter-express",
+		"packages/adapter-fastify",
+		"e2e"
+	],
+	"license": "MIT",
+	"author": {
+		"email": "contato@gabrieljs.dev",
+		"name": "Gabriel de Jesus Silva",
+		"url": "https://gabrieljs.dev"
+	},
+	"scripts": {
+		"test": "vitest --run",
+		"test:e2e": "vitest --config vitest.e2e.config.ts --run",
+		"pretest:coverage": "rimraf -g coverage",
+		"test:coverage": "vitest --coverage --run",
+		"build": "turbo run build",
+		"dev": "turbo run dev",
+		"changeset": "changeset",
+		"version": "changeset version",
+		"publish": "changeset publish"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.8.3",
+		"@faker-js/faker": "^9.9.0",
+		"@rollup/plugin-alias": "^3.1.9",
+		"@types/node": "^20.14.11",
+		"@types/pg": "^8.15.4",
+		"@vitest/coverage-v8": "^2.0.3",
+		"rimraf": "^6.0.1",
+		"turbo": "^1.13.4",
+		"typescript": "^5.5.3",
+		"vitest": "^2.0.3"
+	},
+	"dependencies": {
+		"@changesets/cli": "^2.29.5"
+	}
+}
