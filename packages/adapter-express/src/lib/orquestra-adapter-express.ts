@@ -1,7 +1,7 @@
+import { HttpServerAdapter } from "@orquestra/core";
 import { Express } from "express";
 import request, { Test } from "supertest";
 import TestAgent from "supertest/lib/agent";
-import { HttpServerAdapter } from "@core";
 
 export class OrquestraAdapterExpress extends HttpServerAdapter<Express> {
 	createClient(): TestAgent<Test> {

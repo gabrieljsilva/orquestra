@@ -1,11 +1,7 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import commonjs from "@rollup/plugin-commonjs";
 import json from "@rollup/plugin-json";
 import resolve from "@rollup/plugin-node-resolve";
 import typescript from "@rollup/plugin-typescript";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default {
 	input: "src/index.ts",
@@ -30,7 +26,7 @@ export default {
 	external: ["dotenv", "reflect-metadata"],
 	plugins: [
 		resolve({
-			preferBuiltins: true
+			preferBuiltins: true,
 		}),
 		commonjs(),
 		json(),

@@ -1,5 +1,13 @@
 # @orquestra/adapter-fastify
 
+## 0.0.2
+
+### Patch Changes
+
+- fixed: typings, imports and build worflow
+- Updated dependencies
+  - @orquestra/core@0.0.2
+
 ## 0.0.1
 
 ### Patch Changes

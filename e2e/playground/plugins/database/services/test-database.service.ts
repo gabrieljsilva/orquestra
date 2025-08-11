@@ -1,5 +1,5 @@
+import { EnvHelper, OrquestraService } from "@orquestra/core";
 import { Client } from "pg";
-import { EnvHelper, OrquestraService } from "../../../../../packages/core/src";
 
 export class TestDatabaseService extends OrquestraService {
 	async query(query: string) {

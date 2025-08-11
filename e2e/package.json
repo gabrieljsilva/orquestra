@@ -1,6 +1,6 @@
 {
 	"name": "@workspace/orquestra-e2e",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"private": true,
 	"scripts": {
 		"test": "vitest --config ../vitest.e2e.config.ts --run",
@@ -18,7 +18,10 @@
 		"axios": "^1.11.0",
 		"jsonwebtoken": "^9.0.2",
 		"pg": "^8.16.3",
-		"amqplib": "^0.10.8"
+		"amqplib": "^0.10.8",
+		"@orquestra/core": "^0.0.2",
+		"@orquestra/adapter-express": "^0.0.2",
+		"@orquestra/adapter-fastify": "^0.0.2"
 	},
 	"devDependencies": {
 		"vitest": "^2.0.3",

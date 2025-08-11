@@ -1,6 +1,6 @@
 {
 	"name": "@orquestra/adapter-express",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"main": "dist/index.cjs.js",
 	"module": "dist/index.esm.js",
 	"license": "MIT",
@@ -34,8 +34,7 @@
 		"typescript": "^5.5.3"
 	},
 	"dependencies": {
-		"@orquestra/core": "^0.0.1",
-		"@types/supertest": "^6.0.3",
+		"@orquestra/core": "^0.0.2",
 		"express": "^5.1.0"
 	},
 	"peerDependencies": {

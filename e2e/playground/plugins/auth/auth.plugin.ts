@@ -1,5 +1,4 @@
-import { OnStart, OrquestraHttpServer, OrquestraPlugin } from "../../../../packages/core/src";
-import { HttpMethod } from "../../../../packages/core/src/lib/types";
+import { HttpMethod, OnStart, OrquestraHttpServer, OrquestraPlugin } from "@orquestra/core";
 import { TestAuthService } from "./services";
 
 export class AuthPlugin extends OrquestraPlugin implements OnStart {

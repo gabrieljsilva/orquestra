@@ -1,6 +1,6 @@
+import { EnvHelper, OrquestraContainer } from "@orquestra/core";
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { Wait } from "testcontainers";
-import { EnvHelper, OrquestraContainer } from "../../../../packages/core/src";
 
 export class PostgresOrquestraContainer extends OrquestraContainer<StartedPostgreSqlContainer> {
 	public containerName = "postgres";

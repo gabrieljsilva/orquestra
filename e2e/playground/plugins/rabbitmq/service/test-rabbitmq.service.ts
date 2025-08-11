@@ -1,5 +1,5 @@
+import { OrquestraService } from "@orquestra/core";
 import amqplib from "amqplib";
-import { OrquestraService } from "../../../../../packages/core/src";
 import { retryUntil } from "../../../app/utils";
 
 interface PublishMessageHelperInput {

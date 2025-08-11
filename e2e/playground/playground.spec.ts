@@ -1,7 +1,7 @@
 import "reflect-metadata";
-import { OrquestraAdapterExpress } from "@adapters/express";
-import { EnvHelper, Orquestra } from "@core";
 import { faker } from "@faker-js/faker";
+import { OrquestraAdapterExpress } from "@orquestra/adapter-express";
+import { EnvHelper, Orquestra } from "@orquestra/core";
 import { Factory } from "decorated-factory";
 import nock from "nock";
 import { UserEntity, createApp } from "./app";

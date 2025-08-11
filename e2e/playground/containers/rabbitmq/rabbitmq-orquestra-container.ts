@@ -1,6 +1,6 @@
+import { EnvHelper, OrquestraContainer } from "@orquestra/core";
 import { RabbitMQContainer, StartedRabbitMQContainer } from "@testcontainers/rabbitmq";
 import { Wait } from "testcontainers";
-import { EnvHelper, OrquestraContainer } from "../../../../packages/core/src";
 
 export class RabbitmqOrquestraContainer extends OrquestraContainer<StartedRabbitMQContainer> {
 	public containerName = "rabbitmq";

@@ -16,4 +16,6 @@ export {
 	ValueProvider,
 	FactoryProvider,
 	ClassProvider,
+	HttpMethod,
+	PreRequestHook,
 } from "./lib/types";

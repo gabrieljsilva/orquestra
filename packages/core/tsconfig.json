@@ -18,13 +18,7 @@
 		"forceConsistentCasingInFileNames": false,
 		"noFallthroughCasesInSwitch": false,
 		"types": ["node"],
-		"moduleResolution": "node",
-		"paths": {
-			"@adapters/express": ["../adapters/express/src"],
-			"@adapters/express/*": ["../adapters/express/src/*"],
-			"@adapters/fastify": ["../adapters/fastify/src"],
-			"@adapters/fastify/*": ["../adapters/fastify/src/*"]
-		}
+		"moduleResolution": "node"
 	},
 	"include": ["src/**/*"],
 	"exclude": ["node_modules", "**/*.test.ts", "**/*.spec.ts"]

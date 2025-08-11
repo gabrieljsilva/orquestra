@@ -1,4 +1,4 @@
-import { OrquestraHttpServer, OrquestraService } from "../../../../../packages/core/src";
+import { OrquestraHttpServer, OrquestraService } from "@orquestra/core";
 import { TestDatabaseService } from "../../database/services";
 
 interface CreateUserInput {

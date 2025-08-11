@@ -1,13 +1,15 @@
 {
 	"extends": "./tsconfig.json",
 	"compilerOptions": {
-		"rootDir": "../../",
+		"rootDir": "./src",
 		"outDir": "./dist",
-		"typeRoots": ["../core/src/lib/types", "../../node_modules/@types"],
+		"typeRoots": ["../../node_modules/@types"],
 		"skipLibCheck": true,
-		"types": [],
 		"forceConsistentCasingInFileNames": true,
-		"strict": false
+		"strict": false,
+		"paths": {
+			"@orquestra/core": ["../../core/src"]
+		}
 	},
-	"include": ["src/**/*", "../core/src/**/*"]
+	"include": ["src/**/*"]
 }
