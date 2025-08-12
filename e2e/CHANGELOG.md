@@ -1,5 +1,14 @@
 # @workspace/orquestra-e2e
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies
+  - @orquestra/core@0.1.0
+  - @orquestra/adapter-express@0.1.0
+  - @orquestra/adapter-fastify@0.1.0
+
 ## 1.0.3
 
 ### Patch Changes

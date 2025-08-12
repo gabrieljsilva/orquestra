@@ -1,5 +1,12 @@
 # @orquestra/adapter-fastify
 
+## 0.1.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @orquestra/core@0.1.0
+
 ## 0.0.2
 
 ### Patch Changes

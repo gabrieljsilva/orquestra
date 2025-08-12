@@ -55,6 +55,14 @@ export class Orquestra {
 		await this.bootstrapManager.teardown(this.bootstrapOptions);
 	}
 
+	async provision() {
+		await this.bootstrapManager.provision();
+	}
+
+	async deprovision() {
+		await this.bootstrapManager.deprovision();
+	}
+
 	get http() {
 		const client = this.context.container.get<OrquestraHttpServer>(OrquestraHttpServer);
 		return client.createClient();

@@ -110,6 +110,30 @@ export class BootstrapManager {
 		}
 	}
 
+	async provision() {
+		this.logger.info("Provisioning Orquestra Infra");
+
+		const startedAt = Date.now();
+		await this.startHelpers();
+		await this.startContainers();
+		await this.startPlugins();
+		await this.startServices();
+		const timeTaken = Date.now() - startedAt;
+		this.logger.info(`Orquestra Infra Provisioned in ${timeTaken}ms`);
+	}
+
+	async deprovision() {
+		this.logger.info("Deprovisioning Orquestra Infra");
+
+		const startedAt = Date.now();
+		await this.teardownServices();
+		await this.teardownPlugins();
+		await this.teardownContainers();
+		await this.teardownHelpers();
+		const timeTaken = Date.now() - startedAt;
+		this.logger.info(`Orquestra Infra Deprovisioned in ${timeTaken}ms`);
+	}
+
 	async start(options?: OrquestraBootstrapOptions) {
 		this.logger.info("Starting Orquestra");
 		const startedAt = Date.now();
