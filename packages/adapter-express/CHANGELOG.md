@@ -1,5 +1,16 @@
 # @orquestra/adapter-express
 
+## 0.2.0
+
+### Minor Changes
+
+- added bdd API and macros support
+
+### Patch Changes
+
+- Updated dependencies
+  - @orquestra/core@0.2.0
+
 ## 0.1.0
 
 ### Patch Changes

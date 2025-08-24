@@ -1,5 +1,18 @@
 # @workspace/orquestra-e2e
 
+## 1.1.0
+
+### Minor Changes
+
+- added bdd API and macros support
+
+### Patch Changes
+
+- Updated dependencies
+  - @orquestra/adapter-express@0.2.0
+  - @orquestra/adapter-fastify@0.2.0
+  - @orquestra/core@0.2.0
+
 ## 1.0.4
 
 ### Patch Changes

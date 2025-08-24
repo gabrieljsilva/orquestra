@@ -1,5 +1,11 @@
 # @orquestra/core
 
+## 0.2.0
+
+### Minor Changes
+
+- added bdd API and macros support
+
 ## 0.1.0
 
 ### Minor Changes
