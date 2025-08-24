@@ -58,3 +58,5 @@ coverage
 .turbo
 
 .env
+
+.orquestra

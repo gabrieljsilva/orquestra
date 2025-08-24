@@ -1,15 +1,19 @@
-import { OrquestraHttpServer } from "../adapters/orquestra-http-server";
+import { OrquestraHttpServer } from "../adapters";
 import { logger } from "../constants";
 import { BootstrapManager } from "../internal/bootstrap-manager";
 import { Injectable, IocContainer } from "../internal/ioc-container";
 import { Logger } from "../internal/logger";
+import { BddContainer } from "../internal/orquestra-bdd-container";
 import { OrquestraContext } from "../internal/orquestra-context";
+import { OrquestraConsoleReporter } from "../internal/reporting/orquestra-console-reporter";
 import { IOrquestraContext, OrquestraBootstrapOptions, OrquestraOptions } from "../types";
+import type { FeatureDefinition } from "../types/bdd";
 
 export class Orquestra {
 	private readonly bootstrapManager: BootstrapManager;
 	private readonly context: IOrquestraContext;
 	private readonly logger: Logger;
+	private readonly bddContainer: BddContainer;
 	private bootstrapOptions: OrquestraBootstrapOptions;
 
 	constructor(options: OrquestraOptions) {
@@ -42,6 +46,12 @@ export class Orquestra {
 			env: options.env,
 			logger: this.logger,
 		});
+
+		this.bddContainer = new BddContainer();
+	}
+
+	feature(name: string, definition: FeatureDefinition) {
+		return this.bddContainer.define(name, definition);
 	}
 
 	async start(options?: OrquestraBootstrapOptions) {
@@ -53,6 +63,7 @@ export class Orquestra {
 
 	async teardown() {
 		await this.bootstrapManager.teardown(this.bootstrapOptions);
+		OrquestraConsoleReporter.run();
 	}
 
 	async provision() {
