@@ -5,6 +5,7 @@ import { Injectable, IocContainer } from "../internal/ioc-container";
 import { Logger } from "../internal/logger";
 import { BddContainer } from "../internal/orquestra-bdd-container";
 import { OrquestraContext } from "../internal/orquestra-context";
+import { MacroRegistry } from "../internal/orquestra-macro";
 import { OrquestraConsoleReporter } from "../internal/reporting/orquestra-console-reporter";
 import { IOrquestraContext, OrquestraBootstrapOptions, OrquestraOptions } from "../types";
 import type { FeatureDefinition } from "../types/bdd";
@@ -42,12 +43,21 @@ export class Orquestra {
 			this.context.registerServices(options.services);
 		}
 
+		if (options.macros) {
+			this.context.registerMacros(options.macros);
+		}
+
 		this.bootstrapManager = new BootstrapManager(this.context, {
 			env: options.env,
 			logger: this.logger,
 		});
 
 		this.bddContainer = new BddContainer();
+
+		// Ensure MacroRegistry is available in DI and connected to BDD
+		this.context.container.register({ provide: MacroRegistry, useValue: new MacroRegistry(this.context) } as any);
+		const macroRegistry = this.context.container.get<MacroRegistry>(MacroRegistry as any)!;
+		this.bddContainer.setMacroRegistry(macroRegistry);
 	}
 
 	feature(name: string, definition: FeatureDefinition) {

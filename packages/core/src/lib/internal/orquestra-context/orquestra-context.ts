@@ -6,6 +6,7 @@ import {
 	IOrquestraContext,
 	PluginProvider,
 	ServiceProvider,
+	MacroProvider,
 } from "../../types";
 
 export class OrquestraContext implements IOrquestraContext {
@@ -15,6 +16,7 @@ export class OrquestraContext implements IOrquestraContext {
 	public helpers: Array<HelperProvider> = [];
 	public containers: Array<ContainerProvider> = [];
 	public services: Array<ServiceProvider> = [];
+	public macros: Array<MacroProvider> = [];
 
 	constructor(container: IIocContainer) {
 		this.container = container;
@@ -52,6 +54,14 @@ export class OrquestraContext implements IOrquestraContext {
 		}
 	}
 
+	registerMacros(macros: Array<MacroProvider>): void {
+		this.macros.push(...macros);
+
+		for (const macro of this.macros) {
+			this.container.register(macro);
+		}
+	}
+
 	getHttpServer(): IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>) | undefined {
 		return this.httpServer;
 	}
@@ -70,5 +80,9 @@ export class OrquestraContext implements IOrquestraContext {
 
 	getServiceProviders(): Array<ServiceProvider> {
 		return this.services;
+	}
+
+	getMacroProviders(): Array<MacroProvider> {
+		return this.macros;
 	}
 }

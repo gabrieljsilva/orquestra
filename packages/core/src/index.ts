@@ -1,5 +1,6 @@
 export { Orquestra } from "./lib/orquestra/orquestra";
 export { OrquestraHelper } from "./lib/internal/orquestra-helper";
+export { OrquestraMacro, MacroRegistry } from "./lib/internal/orquestra-macro";
 export { OrquestraPlugin } from "./lib/internal/orquestra-plugin";
 export { OrquestraContainer } from "./lib/internal/orquestra-container";
 export { OrquestraService } from "./lib/internal/orquestra-service";

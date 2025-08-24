@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { FeatureDefinition } from "../../types/bdd";
+import { MacroRegistry, OrquestraMacro } from "../orquestra-macro";
 import type { StepEvent } from "../../types/shard-manager/shard-manager.types";
 import { OrquestraShardManager } from "../orquestra-shard-manager";
 import { BddRunner } from "./bdd.runner";
@@ -50,7 +51,10 @@ export class Scenario<C extends object = {}> {
 				this.feature.registerStep(step);
 				return this as unknown as Scenario<C & T>;
 			}
-			const existing = this.feature.getStep<C, T>(StepKind.GIVEN, name);
+			let existing = this.feature.getStep<C, T>(StepKind.GIVEN, name);
+			if (!existing) {
+				existing = this.feature.getMacroStep<C, T>(StepKind.GIVEN, name);
+			}
 			if (!existing) throw new Error(`Step not found: ${name}`);
 			this.steps.push(existing);
 			return this as unknown as Scenario<C & T>;
@@ -67,7 +71,10 @@ export class Scenario<C extends object = {}> {
 				this.feature.registerStep(step);
 				return this as unknown as Scenario<C & T>;
 			}
-			const existing = this.feature.getStep<C, T>(StepKind.WHEN, name);
+			let existing = this.feature.getStep<C, T>(StepKind.WHEN, name);
+			if (!existing) {
+				existing = this.feature.getMacroStep<C, T>(StepKind.WHEN, name);
+			}
 			if (!existing) throw new Error(`Step not found: ${name}`);
 			this.steps.push(existing);
 			return this as unknown as Scenario<C & T>;
@@ -85,7 +92,10 @@ export class Scenario<C extends object = {}> {
 				this.feature.registerStep(step);
 				return this as unknown as Scenario<C & T>;
 			}
-			const existing = this.feature.getStep<C, T>(StepKind.THEN, name);
+			let existing = this.feature.getStep<C, T>(StepKind.THEN, name);
+			if (!existing) {
+				existing = this.feature.getMacroStep<C, T>(StepKind.THEN, name);
+			}
 			if (!existing) throw new Error(`Step not found: ${name}`);
 			this.steps.push(existing);
 			return this as unknown as Scenario<C & T>;
@@ -144,6 +154,16 @@ export class Feature {
 		return step as Step<C, T> | undefined;
 	}
 
+	getMacroStep<C extends object, T extends object>(kind: StepKind, name: string): Step<C, T> | undefined {
+		const macro = this.container.getMacro(name);
+		if (!macro) return undefined;
+		const step = new Step<C, T>(kind, name, async () => {
+			const result = await macro.execute();
+			return result as T;
+		});
+		return step;
+	}
+
 	private makeKey(kind: StepKind, name: string) {
 		return `${kind}:${name}`;
 	}
@@ -183,6 +203,7 @@ export class Feature {
 export class BddContainer {
 	private readonly features: Array<Feature> = [];
 	private readonly shards: OrquestraShardManager = new OrquestraShardManager();
+	private macroRegistry?: MacroRegistry;
 
 	getRunId(): string {
 		return this.shards.getRunId();
@@ -196,5 +217,13 @@ export class BddContainer {
 		const feature = new Feature(this, name, definition);
 		this.features.push(feature);
 		return feature;
+	}
+
+	setMacroRegistry(registry: MacroRegistry) {
+		this.macroRegistry = registry;
+	}
+
+	getMacro(title: string): OrquestraMacro | undefined {
+		return this.macroRegistry?.get(title);
 	}
 }

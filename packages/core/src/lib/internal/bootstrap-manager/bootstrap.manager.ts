@@ -14,6 +14,8 @@ import { IOrquestraContext } from "../../types";
 import { Injectable } from "../ioc-container";
 import { Logger } from "../logger";
 import { OrquestraContainer } from "../orquestra-container";
+import { MacroRegistry } from "../orquestra-macro";
+import { OrquestraMacro } from "../orquestra-macro";
 
 export class BootstrapManager {
 	private readonly context: IOrquestraContext;
@@ -44,6 +46,7 @@ export class BootstrapManager {
 		this.registerContainers();
 		this.registerPlugins();
 		this.registerServices();
+		this.registerMacros();
 	}
 
 	registerHttpServer(adapter: IHttpServerAdapter) {
@@ -110,6 +113,18 @@ export class BootstrapManager {
 		}
 	}
 
+	registerMacros() {
+		// Ensure MacroRegistry is registered (may have been pre-registered by Orquestra)
+		if (!this.context.container.get(MacroRegistry)) {
+			this.context.container.register(MacroRegistry as any);
+		}
+
+		const macros = this.context.getMacroProviders?.() ?? [];
+		for (const macro of macros) {
+			this.context.container.register(macro as any);
+		}
+	}
+
 	async provision() {
 		this.logger.info("Provisioning Orquestra Infra");
 
@@ -118,6 +133,7 @@ export class BootstrapManager {
 		await this.startContainers();
 		await this.startPlugins();
 		await this.startServices();
+		await this.startMacros();
 		const timeTaken = Date.now() - startedAt;
 		this.logger.info(`Orquestra Infra Provisioned in ${timeTaken}ms`);
 	}
@@ -147,6 +163,7 @@ export class BootstrapManager {
 		await this.startHttpServer();
 		await this.startPlugins();
 		await this.startServices();
+		await this.startMacros();
 
 		const timeTaken = Date.now() - startedAt;
 		this.logger.info(`Orquestra started in ${timeTaken}ms`);
@@ -156,6 +173,8 @@ export class BootstrapManager {
 		this.logger.info("tearing down");
 		const startedAt = Date.now();
 
+		// Macros devem ser os primeiros a encerrar
+		await this.teardownMacros();
 		await this.teardownServices();
 		await this.teardownPlugins();
 		await this.teardownHttpServer();
@@ -291,6 +310,21 @@ export class BootstrapManager {
 		this.logger.info(`Plugins started in ${timeTaken}ms`);
 	}
 
+	private async startMacros() {
+		this.logger.info("Starting macros");
+		const startedAt = Date.now();
+		const macros = this.context.getMacroProviders?.() ?? [];
+		const registry = await this.context.container.resolve<MacroRegistry>(this.context, MacroRegistry as any);
+		for (const macro of macros) {
+			const token = typeof macro === "function" ? macro : (macro as any).provide;
+			const macroInstance = await this.context.container.resolve<OrquestraMacro>(this.context, token);
+			registry.register(macroInstance);
+			await macroInstance?.onStart?.();
+		}
+		const timeTaken = Date.now() - startedAt;
+		this.logger.info(`Macros started in ${timeTaken}ms`);
+	}
+
 	private async teardownPlugins() {
 		this.logger.info("tearing down plugins");
 		const startedAt = Date.now();
@@ -302,6 +336,19 @@ export class BootstrapManager {
 		}
 		const timeTaken = Date.now() - startedAt;
 		this.logger.info(`plugins stopped in ${timeTaken}ms`);
+	}
+
+	private async teardownMacros() {
+		this.logger.info("tearing down macros");
+		const startedAt = Date.now();
+		const macros = this.context.getMacroProviders?.() ?? [];
+		for (const macro of macros) {
+			const token = typeof macro === "function" ? macro : (macro as any).provide;
+			const instance = await this.context.container.resolve<OrquestraMacro>(this.context, token);
+			await instance?.onTeardown?.();
+		}
+		const timeTaken = Date.now() - startedAt;
+		this.logger.info(`macros stopped in ${timeTaken}ms`);
 	}
 
 	private async teardownHttpServer() {

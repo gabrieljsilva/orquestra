@@ -1,6 +1,6 @@
 import { LoadEnvOptions } from "../../helpers/env";
 import { Logger } from "../../internal/logger";
-import { ContainerProvider, HelperProvider, PluginProvider, ServiceProvider } from "../components";
+import { ContainerProvider, HelperProvider, MacroProvider, PluginProvider, ServiceProvider } from "../components";
 import { IHttpServerAdapter } from "../http-server";
 import { IIocContainer } from "../ioc";
 
@@ -13,6 +13,7 @@ export interface IOrquestraContext {
 	helpers: Array<HelperProvider>;
 	containers: Array<ContainerProvider>;
 	services: Array<ServiceProvider>;
+	macros: Array<MacroProvider>;
 
 	// Registration methods
 	registerHttpServer(httpServer: IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>)): void;
@@ -20,6 +21,7 @@ export interface IOrquestraContext {
 	registerHelpers(helpers: Array<HelperProvider>): void;
 	registerContainers(containers: Array<ContainerProvider>): void;
 	registerServices(services: Array<ServiceProvider>): void;
+	registerMacros(macros: Array<MacroProvider>): void;
 
 	// Getter methods
 	getHttpServer(): IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>) | undefined;
@@ -27,6 +29,7 @@ export interface IOrquestraContext {
 	getHelperProviders(): Array<HelperProvider>;
 	getContainerProviders(): Array<ContainerProvider>;
 	getServiceProviders(): Array<ServiceProvider>;
+	getMacroProviders(): Array<MacroProvider>;
 }
 
 export interface OrquestraOptions {
@@ -35,6 +38,7 @@ export interface OrquestraOptions {
 	helpers?: Array<HelperProvider>;
 	containers?: Array<ContainerProvider>;
 	services?: Array<ServiceProvider>;
+	macros?: Array<MacroProvider>;
 	env?: LoadEnvOptions;
 	logger?: Logger;
 }

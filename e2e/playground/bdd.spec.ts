@@ -2,6 +2,7 @@ import { faker } from "@faker-js/faker";
 import { Orquestra } from "@orquestra/core";
 import { Factory } from "decorated-factory";
 import { UserEntity } from "./app";
+import { CreateUserOrquestraMacro } from "./macros/create-user.orquestra-macro";
 
 describe("user", () => {
 	const factory = new Factory(faker);
@@ -13,8 +14,7 @@ describe("user", () => {
 				FOO: "bar",
 			},
 		},
-		containers: [],
-		plugins: [],
+		macros: [CreateUserOrquestraMacro],
 	});
 
 	beforeAll(async () => {
@@ -52,10 +52,7 @@ describe("user", () => {
 
 		feature
 			.scenario("it should create contract successfully")
-			.given("there is a user registered in database", async () => {
-				const user = factory.one(UserEntity).without("id").plain();
-				return { user: { id: 1, ...user } };
-			})
+			.given<{ user: UserEntity }>("there is a user registered in database")
 			.when('I send a POST request to "/contracts" with valid body', async ({ user }) => {
 				const response = { status: 200, token: "some token", contract: { id: 1, name: "Sami Orion", user: user } };
 				return { response };

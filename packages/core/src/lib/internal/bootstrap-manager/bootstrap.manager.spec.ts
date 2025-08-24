@@ -63,16 +63,19 @@ function createMockContext(): IOrquestraContext {
 		helpers: [],
 		containers: [],
 		services: [],
+		macros: [],
 		registerHttpServer: vi.fn(),
 		registerPlugins: vi.fn(),
 		registerHelpers: vi.fn(),
 		registerContainers: vi.fn(),
 		registerServices: vi.fn(),
+		registerMacros: vi.fn(),
 		getHttpServer: vi.fn(),
 		getPluginProviders: vi.fn().mockReturnValue([]),
 		getHelperProviders: vi.fn().mockReturnValue([]),
 		getContainerProviders: vi.fn().mockReturnValue([]),
 		getServiceProviders: vi.fn().mockReturnValue([]),
+		getMacroProviders: vi.fn().mockReturnValue([]),
 	} as unknown as IOrquestraContext;
 }
 
@@ -120,9 +123,13 @@ describe("BootstrapManager", () => {
 			order.push("services");
 		});
 
+		vi.spyOn(manager as any, "startMacros").mockImplementation(async () => {
+			order.push("macros");
+		});
+
 		await manager.start();
 
-		expect(order).toEqual(["helpers", "containers", "http", "plugins", "services"]);
+		expect(order).toEqual(["helpers", "containers", "http", "plugins", "services", "macros"]);
 	});
 
 	it("should skip container start when skipContainers option is passed", async () => {
@@ -135,6 +142,10 @@ describe("BootstrapManager", () => {
 
 	it("should teardown components in the correct order", async () => {
 		const order: string[] = [];
+
+		vi.spyOn(manager as any, "teardownMacros").mockImplementation(async () => {
+			order.push("macros");
+		});
 
 		vi.spyOn(manager as any, "teardownServices").mockImplementation(async () => {
 			order.push("services");
@@ -158,7 +169,7 @@ describe("BootstrapManager", () => {
 
 		await manager.teardown();
 
-		expect(order).toEqual(["services", "plugins", "http", "containers", "helpers"]);
+		expect(order).toEqual(["macros", "services", "plugins", "http", "containers", "helpers"]);
 	});
 
 	it("should skip container teardown when skipContainers option is passed", async () => {
