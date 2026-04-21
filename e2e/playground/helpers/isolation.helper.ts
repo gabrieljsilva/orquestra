@@ -3,7 +3,7 @@ import { Client } from "pg";
 
 export class WorkerIsolationHelper extends OrquestraHelper implements OnStart {
 	async onStart() {
-		const env = this.ctx.container.get<EnvHelper>(EnvHelper);
+		const env = this.ctx.container.get(EnvHelper);
 		const workerId = process.env.ORQUESTRA_WORKER_ID ?? "0";
 
 		const baseUrl = env.get("DATABASE_BASE_URL");

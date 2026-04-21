@@ -42,10 +42,15 @@ export class IocContainer implements IIocContainer {
 		return providerOrClass.provide;
 	}
 
-	get<T extends Injectable>(token: ProviderToken): T | undefined {
+	get<T extends Injectable>(token: ClassConstructor<T>): T | undefined;
+	get<T extends Injectable>(token: string | Symbol): T | undefined;
+	get<T>(token: ProviderToken): T | undefined;
+	get<T>(token: ProviderToken): T | undefined {
 		return this.instances.get(token);
 	}
 
+	async resolve<T extends Injectable>(ctx: IOrquestraContext, token: ClassConstructor<T>): Promise<T>;
+	async resolve<T extends Injectable>(ctx: IOrquestraContext, token: string | Symbol): Promise<T>;
 	async resolve<T extends Injectable>(ctx: IOrquestraContext, token: ProviderToken): Promise<T> {
 		if (this.instances.has(token)) {
 			this.logger.debug(`Returning cached instance for: ${String(token)}`);

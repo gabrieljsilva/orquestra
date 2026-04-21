@@ -1,8 +1,6 @@
 import { Injectable } from "../ioc-container";
 
-export abstract class OrquestraMacro extends Injectable {
-  abstract title: string;
-  abstract execute(ctx?: Readonly<any>): Promise<any> | any;
+export abstract class OrquestraMacro<T extends object | void = void> extends Injectable {
+	abstract title: string;
+	abstract execute(ctx?: Readonly<any>): Promise<T> | T;
 }
-
-

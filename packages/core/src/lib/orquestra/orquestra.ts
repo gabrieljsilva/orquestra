@@ -7,7 +7,7 @@ import { BddContainer } from "../internal/orquestra-bdd-container";
 import { OrquestraContext } from "../internal/orquestra-context";
 import { MacroRegistry } from "../internal/orquestra-macro";
 import type { StepEvent } from "../types/events";
-import { IOrquestraContext, OrquestraBootstrapOptions, OrquestraOptions } from "../types";
+import { ClassConstructor, IOrquestraContext, OrquestraBootstrapOptions, OrquestraOptions } from "../types";
 import type { FeatureDefinition } from "../types/bdd";
 import type { FeatureMeta } from "../types/reporting";
 
@@ -101,8 +101,10 @@ export class Orquestra {
 		return client.createClient();
 	}
 
+	get<T extends Injectable>(token: ClassConstructor<T>): T;
+	get<T extends Injectable>(token: string | Symbol): T;
 	get<T extends Injectable>(token: string | Function | Symbol): T {
-		const instance = this.context.container.get<T>(token);
+		const instance = this.context.container.get<T>(token as any);
 		if (!instance) {
 			throw new Error(`Service not found for token: ${String(token)}`);
 		}

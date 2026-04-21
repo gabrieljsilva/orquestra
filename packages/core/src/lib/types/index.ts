@@ -7,3 +7,4 @@ export * from "./reporting";
 export * from "./events";
 export * from "./config";
 export * from "./artifact";
+export * from "./registry";

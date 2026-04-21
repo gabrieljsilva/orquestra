@@ -43,7 +43,7 @@ feature
 		return { user };
 	})
 	.when("I publish the user to the users queue", async ({ user }) => {
-		const rabbitmq = orquestra.get<TestRabbitmqService>(TestRabbitmqService);
+		const rabbitmq = orquestra.get(TestRabbitmqService);
 		await rabbitmq.publishMessage({
 			queue: process.env.USERS_QUEUE as string,
 			exchange: process.env.USERS_EXCHANGE as string,
@@ -51,7 +51,7 @@ feature
 		});
 	})
 	.then("the user should be persisted in the database", async ({ user }) => {
-		const auth = orquestra.get<TestAuthService>(TestAuthService);
+		const auth = orquestra.get(TestAuthService);
 		const persisted = await retryUntil(() => auth.findUserByEmail(user.email), 5);
 		strictEqual(persisted.email, user.email);
 		strictEqual(persisted.name, user.name);

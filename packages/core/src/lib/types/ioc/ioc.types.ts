@@ -6,8 +6,11 @@ export interface IIocContainer {
 		providerOrClass: Provider<T> | ClassConstructor<T>,
 	): ProviderToken | ClassConstructor<T>;
 	register<T>(provider: { provide: ProviderToken; useValue: T }): ProviderToken;
-	get<T extends Injectable>(token: ProviderToken): T | undefined;
+	get<T extends Injectable>(token: ClassConstructor<T>): T | undefined;
+	get<T extends Injectable>(token: string | Symbol): T | undefined;
 	get<T>(token: ProviderToken): T | undefined;
+	resolve<T extends Injectable>(ctx: IOrquestraContext, token: ClassConstructor<T>): Promise<T>;
+	resolve<T extends Injectable>(ctx: IOrquestraContext, token: string | Symbol): Promise<T>;
 	resolve<T extends Injectable>(ctx: IOrquestraContext, token: ProviderToken): Promise<T>;
 }
 

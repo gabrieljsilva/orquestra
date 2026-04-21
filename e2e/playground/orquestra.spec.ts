@@ -15,5 +15,9 @@ export default defineSpec({
 			name: "contracts",
 			context: "After registration, users can create contracts that bind them to platform services.",
 		},
+		{
+			name: "integrations",
+			context: "The platform talks to external services to notify downstream systems and enrich its own data. External calls must be resilient and testable without depending on third-party availability.",
+		},
 	],
 });

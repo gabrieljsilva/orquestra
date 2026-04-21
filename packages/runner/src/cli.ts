@@ -6,6 +6,7 @@ try {
 
 import { defineCommand, runMain } from "citty";
 import { testCommand } from "./lib/commands/test.command";
+import { typesCommand } from "./lib/commands/types.command";
 
 const main = defineCommand({
 	meta: {
@@ -15,6 +16,7 @@ const main = defineCommand({
 	},
 	subCommands: {
 		test: testCommand,
+		types: typesCommand,
 	},
 });
 

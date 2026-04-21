@@ -5,5 +5,5 @@
     "target": "ES2022",
     "moduleResolution": "bundler"
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts", "../.orquestra/orquestra.d.ts"]
 }

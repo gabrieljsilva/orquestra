@@ -43,4 +43,10 @@ export {
 	ArtifactPersona,
 	ArtifactDomain,
 	ArtifactSummary,
+	OrquestraRegistry,
+	RegistryPersona,
+	RegistryDomain,
+	RegistryMacros,
+	RegistryMacroTitle,
+	RegistryMacroContext,
 } from "./lib/types";

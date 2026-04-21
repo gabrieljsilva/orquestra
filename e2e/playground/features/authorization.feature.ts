@@ -1,12 +1,7 @@
 import { strictEqual } from "node:assert";
-import { faker } from "@faker-js/faker";
 import { orquestra } from "@orquestra/core";
-import { Factory } from "decorated-factory";
-import { UserEntity } from "../app";
 import { AuthPlugin } from "../plugins/auth/auth.plugin";
 import { TestAuthService } from "../plugins/auth/services";
-
-const factory = new Factory(faker);
 
 const feature = orquestra.feature("authorization", {
 	context:
@@ -21,7 +16,7 @@ feature
 	.scenario("should reject unauthenticated requests with 401")
 	.given("there is a clean database")
 	.given("I have no authentication token", () => {
-		const authPlugin = orquestra.get<AuthPlugin>(AuthPlugin);
+		const authPlugin = orquestra.get(AuthPlugin);
 		authPlugin.clearToken();
 	})
 	.when('I send GET to "/users"', async () => {
@@ -35,17 +30,14 @@ feature
 feature
 	.scenario("should list users when authenticated")
 	.given("there is a clean database")
-	.given("I am authenticated as a registered user", async () => {
-		const authService = orquestra.get<TestAuthService>(TestAuthService);
-		const user = factory.one(UserEntity).without("id").plain();
+	.given("there is a user registered in database")
+	.given("I have an auth token for the registered user", async ({ user }) => {
+		const authService = orquestra.get(TestAuthService);
 		await authService.createUser(user);
-		const { token } = await authService.makeLogin({
-			email: user.email,
-			password: user.password,
-		});
-		const authPlugin = orquestra.get<AuthPlugin>(AuthPlugin);
+		const { token } = await authService.makeLogin({ email: user.email, password: user.password });
+		const authPlugin = orquestra.get(AuthPlugin);
 		authPlugin.setToken(token);
-		return { user, token };
+		return { token };
 	})
 	.when('I send GET to "/users"', async () => {
 		const response = await orquestra.http.get("/users");

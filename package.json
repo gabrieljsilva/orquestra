@@ -1,6 +1,6 @@
 {
 	"name": "orquestra-monorepo",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"private": true,
 	"workspaces": [
 		"packages/core",
@@ -17,7 +17,7 @@
 	},
 	"scripts": {
 		"test": "vitest --run",
-		"test:e2e": "vitest --config vitest.e2e.config.ts --run",
+		"test:e2e": "orquestra test --config ./e2e/playground/orquestra.config.ts ",
 		"pretest:coverage": "rimraf -g coverage",
 		"test:coverage": "vitest --coverage --run",
 		"build": "turbo run build",

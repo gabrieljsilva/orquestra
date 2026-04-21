@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { FeatureDefinition } from "../../types/bdd";
 import type { StepEvent } from "../../types/events";
+import type { RegistryMacroContext, RegistryMacroTitle } from "../../types/registry";
 import type { FeatureMeta } from "../../types/reporting";
 import { MacroRegistry, OrquestraMacro } from "../orquestra-macro";
 import { BddRunner } from "./bdd.runner";
@@ -43,6 +44,7 @@ export class Scenario<C extends object = {}> {
 	}
 
 	given<T extends object = {}>(name: string, fn: StepFn<C, T>): Scenario<C & T>;
+	given<Title extends RegistryMacroTitle>(title: Title): Scenario<C & RegistryMacroContext<Title>>;
 	given<T extends object = {}>(name: string): Scenario<C & T>;
 	given<T extends object>(name: string, fn?: StepFn<C, T>): Scenario<any> {
 		return this.feature.withRegistry(() => {
@@ -69,6 +71,7 @@ export class Scenario<C extends object = {}> {
 	}
 
 	when<T extends object = {}>(name: string, fn: StepFn<C, T>): Scenario<C & T>;
+	when<Title extends RegistryMacroTitle>(title: Title): Scenario<C & RegistryMacroContext<Title>>;
 	when<T extends object = {}>(name: string): Scenario<C & T>;
 	when<T extends object>(name: string, fn?: StepFn<C, T>): Scenario<any> {
 		return this.feature.withRegistry(() => {
@@ -96,6 +99,8 @@ export class Scenario<C extends object = {}> {
 
 	// biome-ignore lint/suspicious/noThenProperty: Gherkin semantics
 	then<T extends object = {}>(name: string, fn: StepFn<C, T>): Scenario<C & T>;
+	// biome-ignore lint/suspicious/noThenProperty: Gherkin semantics
+	then<Title extends RegistryMacroTitle>(title: Title): Scenario<C & RegistryMacroContext<Title>>;
 	then<T extends object = {}>(name: string): Scenario<C & T>;
 	// biome-ignore lint/suspicious/noThenProperty: Gherkin semantics
 	then<T extends object>(name: string, fn?: StepFn<C, T>): Scenario<any> {
@@ -186,7 +191,7 @@ export class Feature {
 		if (!macro) return undefined;
 		const step = new Step<C, T>(kind, name, async () => {
 			const result = await macro.execute();
-			return result as T;
+			return result as unknown as T;
 		});
 		return step;
 	}

@@ -8,7 +8,7 @@ import { ClassConstructor, Provider } from "../ioc";
 export type PluginProvider = ClassConstructor<OrquestraPlugin> | Provider<OrquestraPlugin>;
 export type HelperProvider = ClassConstructor<OrquestraHelper> | Provider<OrquestraHelper>;
 export type ServiceProvider = ClassConstructor<OrquestraService> | Provider<OrquestraService>;
-export type MacroProvider = ClassConstructor<OrquestraMacro> | Provider<OrquestraMacro>;
+export type MacroProvider = ClassConstructor<OrquestraMacro<any>> | Provider<OrquestraMacro<any>>;
 
 export interface ContainerWithDependencies {
 	container: ClassConstructor<OrquestraContainer<any>> | Provider<OrquestraContainer<any>>;

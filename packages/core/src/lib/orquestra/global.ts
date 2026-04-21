@@ -1,6 +1,6 @@
 import type { Injectable } from "../internal/ioc-container";
 import type { FeatureDefinition } from "../types/bdd";
-import type { OrquestraOptions } from "../types";
+import type { ClassConstructor, OrquestraOptions } from "../types";
 import { Orquestra } from "./orquestra";
 
 let instance: Orquestra | null = null;
@@ -28,7 +28,14 @@ export function resetOrquestraInstance(): void {
 	instance = null;
 }
 
-export const orquestra = {
+export interface OrquestraFacade {
+	feature: Orquestra["feature"];
+	readonly http: Orquestra["http"];
+	get<T extends Injectable>(token: ClassConstructor<T>): T;
+	get<T extends Injectable>(token: string | Symbol): T;
+}
+
+export const orquestra: OrquestraFacade = {
 	feature(name: string, definition: FeatureDefinition) {
 		return getOrquestraInstance().feature(name, definition);
 	},
@@ -36,6 +43,6 @@ export const orquestra = {
 		return getOrquestraInstance().http;
 	},
 	get<T extends Injectable>(token: string | Function | Symbol): T {
-		return getOrquestraInstance().get<T>(token);
+		return getOrquestraInstance().get<T>(token as any);
 	},
 };

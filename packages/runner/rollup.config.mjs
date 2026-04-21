@@ -10,6 +10,7 @@ const shared = {
 		"@orquestra/core",
 		"citty",
 		"jiti",
+		"typescript",
 		"node:path",
 		"node:fs",
 		"node:url",

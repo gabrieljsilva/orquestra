@@ -1,10 +1,7 @@
-import {
-	Orquestra,
-	OrquestraConsoleReporter,
-	type OrquestraArtifact,
-	OrquestraReporter,
-	type StepEvent,
-} from "@orquestra/core";
+import { OrquestraConsoleReporter, OrquestraReporter } from "../internal/reporting";
+import type { OrquestraArtifact } from "../types/artifact";
+import type { StepEvent } from "../types/events";
+import { Orquestra } from "./orquestra";
 
 function buildMinimalArtifact(orquestra: Orquestra): OrquestraArtifact {
 	const events = orquestra.getEvents();
@@ -73,7 +70,7 @@ function buildMinimalArtifact(orquestra: Orquestra): OrquestraArtifact {
 	};
 }
 
-describe("reporting", () => {
+describe("Orquestra integration", () => {
 	describe("eventos em memoria", () => {
 		const orquestra = new Orquestra({});
 
@@ -255,7 +252,7 @@ describe("reporting", () => {
 			await orquestra.teardown();
 		});
 
-		it("reporter recebe eventos e meta corretamente", async () => {
+		it("reporter recebe artifact corretamente", async () => {
 			const feature = orquestra.feature("custom reporter feature", {
 				as: "dev",
 				I: "want a custom reporter",
