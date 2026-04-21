@@ -59,11 +59,12 @@ Order of operations and where your code runs:
 5) Services onStart
 6) Macros onStart
 
-Teardown runs in the safe reverse order and prints a console report at the end.
+Teardown runs in the safe reverse order. It does **not** print any BDD report by default — reporters are opt-in via `orquestra.report()` (see [Reporters & Run Artifacts](#reporters--run-artifacts)).
 
 Methods:
-- `await orquestra.start(options?)` – boot all components (skip containers with `{ skipContainers: true }`).
-- `await orquestra.teardown()` – gracefully stop everything and print the BDD report.
+- `await orquestra.start(options?)` – boot all components (skip containers with `{ skipContainers: true }`). Also writes the run manifest and prunes old runs according to `historyLimit`.
+- `await orquestra.teardown()` – gracefully stop everything. Silent by default.
+- `await orquestra.report(reporter)` – read the current run's persisted events and pass them to a reporter. Can be called before or after `teardown()` and multiple times.
 - `await orquestra.provision()` / `await orquestra.deprovision()` – start/stop infra only (helpers, containers, plugins, services, macros).
 
 ---
@@ -79,11 +80,13 @@ new Orquestra({
   macros?: Array<MacroProvider>;
   env?: LoadEnvOptions;
   logger?: Logger;
+  historyLimit?: number; // how many runs to keep under `.orquestra/`. Default: 1 (only the current run).
 });
 
 // Runtime
 await orquestra.start();
 await orquestra.teardown();
+await orquestra.report(new OrquestraConsoleReporter());
 await orquestra.provision();
 await orquestra.deprovision();
 
@@ -302,7 +305,73 @@ feature
   .when('I send a POST to "/contracts"', async ({ userId }) => { /* ... */ });
 ```
 
-Reporting: on `teardown()`, a console reporter summarizes each BDD step with timing and status.
+Reporting is decoupled from `teardown()` — see [Reporters & Run Artifacts](#reporters--run-artifacts) below.
+
+---
+
+## Reporters & Run Artifacts
+
+### Run artifacts on disk
+Every `orquestra.start()` creates a directory `.orquestra/<runId>/` in the current working directory, containing:
+- `manifest.json` – `{ orquestraVersion, createdAt, runId }`. Written at start. Used to detect incompatible runs when replaying.
+- `meta.json` – array of `{ feature, as, I, so }` per feature defined in the run. Written when `feature.test()` is called.
+- `<timestamp>-<pid>-<rand>.json` – one file per step event (`pending` → `success`/`failed`).
+
+### Opt-in reporting
+`teardown()` no longer prints anything. To render a report, call `orquestra.report(reporter)` explicitly — before or after teardown, as many times as you want:
+
+```ts
+import { Orquestra, OrquestraConsoleReporter } from '@orquestra/core';
+
+afterAll(async () => {
+  await orquestra.report(new OrquestraConsoleReporter());
+  await orquestra.teardown();
+});
+```
+
+Output example:
+```
+Feature: create user
+  As an unauthenticated visitor
+  I want to register
+  So that I can use the app
+
+  Scenario: success path
+    ├── ✓ Given I have a valid email and password
+    ├── ✓ When I send a POST request to "/users"
+    └── ✓ Then should return 200
+```
+
+### Custom reporters
+Extend `OrquestraReporter` and receive the same `events` + `meta` the console reporter uses. Useful for HTML/JSON/TAP output or pushing to an external dashboard.
+
+```ts
+import { OrquestraReporter, StepEvent, FeatureMeta } from '@orquestra/core';
+
+class JsonReporter extends OrquestraReporter {
+  async run(events: StepEvent[], meta: FeatureMeta[]): Promise<void> {
+    await writeFile('report.json', JSON.stringify({ events, meta }, null, 2));
+  }
+}
+
+await orquestra.report(new JsonReporter());
+```
+
+### Run history (`historyLimit`)
+By default (`historyLimit: 1`), only the current run's directory is kept and every previous run under `.orquestra/` is deleted at the next `start()`. Increase it if you want to keep history for retroactive reporting:
+
+```ts
+new Orquestra({ historyLimit: 5 }); // keep the 4 most recent previous runs + the current one
+```
+
+Only directories with a valid UUID name are considered — any other file or folder under `.orquestra/` is left untouched.
+
+### Version compatibility
+When `report()` runs, it reads the run's `manifest.json` and compares its `orquestraVersion` against the currently installed `@orquestra/core`:
+- Same major/minor → processes silently.
+- Same major, different minor → logs a warning but processes.
+- Different major → throws, aborting the report.
+- Missing manifest (legacy run) → logs a warning and processes best-effort.
 
 ---
 

@@ -1,6 +1,6 @@
-import { ORQUESTRA_RUN_ID_ENV } from "../../constants/shard-manager";
+import type { FeatureMeta } from "../../types/reporting";
 import type { StepEvent } from "../../types/shard-manager/shard-manager.types";
-import { OrquestraShardManager } from "../orquestra-shard-manager";
+import { OrquestraReporter } from "./orquestra-reporter";
 
 const c = {
 	bold: (s: string) => `\x1b[1m${s}\x1b[22m`,
@@ -9,13 +9,41 @@ const c = {
 	gray: (s: string) => `\x1b[90m${s}\x1b[39m`,
 };
 
-export class OrquestraConsoleReporter {
-	static run(): void {
-		const runId = process.env[ORQUESTRA_RUN_ID_ENV];
-		if (!runId) return;
-		const shards = new OrquestraShardManager(runId);
-		const events = shards.readEvents();
+const SYMBOL: Record<StepEvent["status"], string> = {
+	success: "✓",
+	failed: "✗",
+	pending: "○",
+};
 
+const UNKNOWN_SYMBOL = "?";
+
+interface RenderedStep {
+	stepId: string;
+	name: string;
+	keyword: StepEvent["keyword"];
+	status: StepEvent["status"];
+	error?: StepEvent["error"];
+	order: number;
+}
+
+export class OrquestraConsoleReporter extends OrquestraReporter {
+	run(events: StepEvent[], meta: FeatureMeta[]): void {
+		if (!events.length) return;
+
+		const metaByFeature = new Map(meta.map((m) => [m.feature, m]));
+		const { byFeature, featureOrder } = this.aggregate(events);
+
+		for (const featureName of featureOrder) {
+			const scMap = byFeature.get(featureName);
+			if (!scMap) continue;
+			this.printFeature(featureName, scMap, metaByFeature.get(featureName));
+		}
+	}
+
+	private aggregate(events: StepEvent[]): {
+		byFeature: Map<string, Map<string, RenderedStep[]>>;
+		featureOrder: string[];
+	} {
 		const latestByStep = new Map<string, StepEvent>();
 		const orderByStep = new Map<string, number>();
 		let seq = 0;
@@ -25,23 +53,16 @@ export class OrquestraConsoleReporter {
 			if (!orderByStep.has(evt.stepId)) orderByStep.set(evt.stepId, ++seq);
 		}
 
-		const byFeature = new Map<
-			string,
-			Map<
-				string,
-				Array<{
-					stepId: string;
-					name: string;
-					keyword: StepEvent["keyword"];
-					status: StepEvent["status"];
-					error?: StepEvent["error"];
-					order: number;
-				}>
-			>
-		>();
+		const byFeature = new Map<string, Map<string, RenderedStep[]>>();
+		const featureOrder: string[] = [];
 
 		for (const [stepId, evt] of latestByStep) {
-			const featureMap = byFeature.get(evt.feature) ?? new Map();
+			let featureMap = byFeature.get(evt.feature);
+			if (!featureMap) {
+				featureMap = new Map();
+				byFeature.set(evt.feature, featureMap);
+				featureOrder.push(evt.feature);
+			}
 			const steps = featureMap.get(evt.scenario) ?? [];
 			steps.push({
 				stepId,
@@ -52,30 +73,62 @@ export class OrquestraConsoleReporter {
 				order: orderByStep.get(stepId) || 0,
 			});
 			featureMap.set(evt.scenario, steps);
-			byFeature.set(evt.feature, featureMap);
 		}
 
-		for (const [featureName, scMap] of byFeature) {
-			console.log(c.bold(`${featureName}`));
-			const scenarios = Array.from(scMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-			for (const [scenarioName, steps] of scenarios) {
-				steps.sort((a, b) => a.order - b.order);
-				const hasFail = steps.some((s) => s.status === "failed");
-				const allOk = !hasFail && steps.every((s) => s.status === "success");
-				const scenarioLabel = `\t${scenarioName}`;
-				console.log(allOk ? c.green(scenarioLabel) : scenarioLabel);
-				for (const step of steps) {
-					const line = `\t\t${step.keyword} ${step.name}`;
-					if (step.status === "failed") {
-						console.log(c.red(line));
-						if (step.error?.message) console.log(c.red(`\t\t\t→ ${step.error.message}`));
-					} else if (allOk) {
-						console.log(c.green(line));
-					} else {
-						console.log(c.gray(line));
-					}
-				}
+		return { byFeature, featureOrder };
+	}
+
+	private printFeature(featureName: string, scMap: Map<string, RenderedStep[]>, meta: FeatureMeta | undefined): void {
+		console.log(c.bold(`Feature: ${featureName}`));
+		if (meta) {
+			console.log(`  As ${this.prefixArticle(meta.as)}`);
+			console.log(`  I ${meta.I}`);
+			console.log(`  So that ${meta.so}`);
+		}
+		console.log("");
+
+		const scenarios = Array.from(scMap.entries());
+		for (let i = 0; i < scenarios.length; i++) {
+			const [scenarioName, steps] = scenarios[i];
+			this.printScenario(scenarioName, steps);
+			if (i < scenarios.length - 1) console.log("");
+		}
+	}
+
+	private printScenario(scenarioName: string, steps: RenderedStep[]): void {
+		steps.sort((a, b) => a.order - b.order);
+		const hasFail = steps.some((s) => s.status === "failed");
+		const allOk = !hasFail && steps.every((s) => s.status === "success");
+
+		const scenarioLabel = `  Scenario: ${scenarioName}`;
+		console.log(allOk ? c.green(scenarioLabel) : scenarioLabel);
+
+		for (let i = 0; i < steps.length; i++) {
+			const step = steps[i];
+			const isLast = i === steps.length - 1;
+			const branch = isLast ? "└──" : "├──";
+			const symbol = SYMBOL[step.status] ?? UNKNOWN_SYMBOL;
+			const line = `    ${branch} ${symbol} ${step.keyword} ${step.name}`;
+
+			if (step.status === "failed") {
+				console.log(c.red(line));
+				if (step.error?.message) console.log(c.red(`        → ${step.error.message}`));
+			} else if (step.status === "pending") {
+				console.log(c.gray(line));
+			} else if (allOk) {
+				console.log(c.green(line));
+			} else {
+				console.log(c.gray(line));
 			}
 		}
+	}
+
+	private prefixArticle(as: string): string {
+		const trimmed = as.trim();
+		if (!trimmed) return trimmed;
+		const lower = trimmed.toLowerCase();
+		if (/^(an?|the)\s/.test(lower)) return trimmed;
+		const startsWithVowel = /^[aeiou]/i.test(trimmed);
+		return `${startsWithVowel ? "an" : "a"} ${trimmed}`;
 	}
 }

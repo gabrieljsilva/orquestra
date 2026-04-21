@@ -1,7 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { FeatureDefinition } from "../../types/bdd";
-import { MacroRegistry, OrquestraMacro } from "../orquestra-macro";
+import type { FeatureMeta } from "../../types/reporting";
 import type { StepEvent } from "../../types/shard-manager/shard-manager.types";
+import { MacroRegistry, OrquestraMacro } from "../orquestra-macro";
 import { OrquestraShardManager } from "../orquestra-shard-manager";
 import { BddRunner } from "./bdd.runner";
 
@@ -185,12 +186,22 @@ export class Feature {
 	getName() {
 		return this.name;
 	}
+	getAs() {
+		return this.as;
+	}
+	getI() {
+		return this.I;
+	}
+	getSo() {
+		return this.so;
+	}
 	getCollectTs(stepId: string) {
 		return this.collectTimestamps.get(stepId);
 	}
 
 	async test(): Promise<Array<{ scenario: string; context: object }>> {
 		await this.collect();
+		this.container.persistMeta();
 		const results: Array<{ scenario: string; context: object }> = [];
 		for (const scenario of this.scenarios) {
 			const context = await this.withRegistry(() => scenario.runAllSteps());
@@ -225,5 +236,18 @@ export class BddContainer {
 
 	getMacro(title: string): OrquestraMacro | undefined {
 		return this.macroRegistry?.get(title);
+	}
+
+	getFeatureMeta(): FeatureMeta[] {
+		return this.features.map((f) => ({
+			feature: f.getName(),
+			as: f.getAs(),
+			I: f.getI(),
+			so: f.getSo(),
+		}));
+	}
+
+	persistMeta(): void {
+		this.shards.writeMeta(this.getFeatureMeta());
 	}
 }

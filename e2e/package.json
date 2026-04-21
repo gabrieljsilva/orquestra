@@ -8,24 +8,24 @@
 	},
 	"dependencies": {
 		"@faker-js/faker": "^9.9.0",
-		"decorated-factory": "^2.0.0",
-		"nock": "^13.5.6",
-		"reflect-metadata": "^0.2.0",
-		"testcontainers": "^11.2.1",
+		"@orquestra/adapter-express": "^0.2.0",
+		"@orquestra/adapter-fastify": "^0.2.0",
+		"@orquestra/core": "^0.2.0",
 		"@testcontainers/postgresql": "^11.5.1",
 		"@testcontainers/rabbitmq": "^11.5.1",
 		"@types/amqplib": "^0.10.5",
-		"axios": "^1.11.0",
-		"jsonwebtoken": "^9.0.2",
-		"pg": "^8.16.3",
 		"amqplib": "^0.10.8",
-		"@orquestra/core": "^0.2.0",
-		"@orquestra/adapter-express": "^0.2.0",
-		"@orquestra/adapter-fastify": "^0.2.0"
+		"axios": "^1.11.0",
+		"decorated-factory": "^2.0.0",
+		"jsonwebtoken": "^9.0.2",
+		"nock": "^13.5.6",
+		"pg": "^8.16.3",
+		"reflect-metadata": "^0.2.0",
+		"testcontainers": "^11.2.1"
 	},
 	"devDependencies": {
-		"vitest": "^2.0.3",
 		"ts-node": "^10.9.1",
-		"typescript": "^5.5.3"
+		"typescript": "^5.5.3",
+		"vitest": "^4.1.5"
 	}
 }

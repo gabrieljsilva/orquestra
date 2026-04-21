@@ -8,6 +8,7 @@ export { OrquestraContext } from "./lib/internal/orquestra-context";
 export { EnvHelper } from "./lib/helpers/env";
 export { Logger } from "./lib/internal/logger";
 export { OrquestraHttpServer, HttpServerAdapter } from "./lib/adapters/orquestra-http-server";
+export { OrquestraReporter, OrquestraConsoleReporter } from "./lib/internal/reporting";
 
 export {
 	OnStart,
@@ -19,4 +20,8 @@ export {
 	ClassProvider,
 	HttpMethod,
 	PreRequestHook,
+	FeatureMeta,
+	RunManifest,
+	StepEvent,
+	StepStatus,
 } from "./lib/types";

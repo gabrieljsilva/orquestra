@@ -1,24 +1,31 @@
 import { OrquestraHttpServer } from "../adapters";
 import { logger } from "../constants";
+import { getPackageVersion } from "../helpers/version";
 import { BootstrapManager } from "../internal/bootstrap-manager";
 import { Injectable, IocContainer } from "../internal/ioc-container";
 import { Logger } from "../internal/logger";
 import { BddContainer } from "../internal/orquestra-bdd-container";
 import { OrquestraContext } from "../internal/orquestra-context";
 import { MacroRegistry } from "../internal/orquestra-macro";
-import { OrquestraConsoleReporter } from "../internal/reporting/orquestra-console-reporter";
+import { OrquestraShardManager } from "../internal/orquestra-shard-manager";
+import { OrquestraReporter } from "../internal/reporting/orquestra-reporter";
+import { assertCompatible } from "../internal/reporting/version-compatibility";
 import { IOrquestraContext, OrquestraBootstrapOptions, OrquestraOptions } from "../types";
 import type { FeatureDefinition } from "../types/bdd";
+
+const DEFAULT_HISTORY_LIMIT = 1;
 
 export class Orquestra {
 	private readonly bootstrapManager: BootstrapManager;
 	private readonly context: IOrquestraContext;
 	private readonly logger: Logger;
 	private readonly bddContainer: BddContainer;
+	private readonly historyLimit: number;
 	private bootstrapOptions: OrquestraBootstrapOptions;
 
 	constructor(options: OrquestraOptions) {
 		this.logger = options.logger || logger;
+		this.historyLimit = options.historyLimit ?? DEFAULT_HISTORY_LIMIT;
 
 		const container = new IocContainer(this.logger);
 		this.context = new OrquestraContext(container);
@@ -54,9 +61,8 @@ export class Orquestra {
 
 		this.bddContainer = new BddContainer();
 
-		// Ensure MacroRegistry is available in DI and connected to BDD
-		this.context.container.register({ provide: MacroRegistry, useValue: new MacroRegistry(this.context) } as any);
-		const macroRegistry = this.context.container.get<MacroRegistry>(MacroRegistry as any)!;
+		const macroRegistry = new MacroRegistry(this.context);
+		this.context.container.register({ provide: MacroRegistry, useValue: macroRegistry } as any);
 		this.bddContainer.setMacroRegistry(macroRegistry);
 	}
 
@@ -68,12 +74,33 @@ export class Orquestra {
 		if (options) {
 			this.bootstrapOptions = options;
 		}
+
+		const shards = new OrquestraShardManager();
+		shards.cleanupOldRuns(this.historyLimit);
+		shards.writeManifest({
+			orquestraVersion: getPackageVersion(),
+			createdAt: new Date().toISOString(),
+			runId: shards.getRunId(),
+		});
+
 		await this.bootstrapManager.start(this.bootstrapOptions);
 	}
 
 	async teardown() {
 		await this.bootstrapManager.teardown(this.bootstrapOptions);
-		OrquestraConsoleReporter.run();
+	}
+
+	async report(reporter: OrquestraReporter): Promise<void> {
+		const shards = new OrquestraShardManager();
+		const manifest = shards.readManifest();
+		if (manifest) {
+			assertCompatible(manifest.orquestraVersion, getPackageVersion());
+		} else {
+			console.warn("[Orquestra] Run sem manifest — pulando check de versao.");
+		}
+		const events = shards.readEvents();
+		const meta = shards.readMeta();
+		await reporter.run(events, meta);
 	}
 
 	async provision() {
