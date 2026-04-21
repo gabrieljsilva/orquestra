@@ -7,7 +7,7 @@ export class AuthPlugin extends OrquestraPlugin implements OnStart {
 	private httpServer: OrquestraHttpServer | null = null;
 
 	async onStart() {
-		this.httpServer = this.ctx.container.get<OrquestraHttpServer>(OrquestraHttpServer);
+		this.httpServer = this.ctx.container.get(OrquestraHttpServer);
 
 		this.ctx.registerServices([TestAuthService]);
 

@@ -1,407 +1,349 @@
 # @orquestra/core
 
-Integration test orchestration engine for Node.js/TypeScript. It manages your test stack end-to-end: containers, HTTP server, DI/Context, helpers, plugins, macros, and BDD with reporting.
+The engine of the Orquestra platform: BDD primitives, IoC container, lifecycle
+management, and reporter API.
+
+If you're looking for the CLI runner and config file, see
+[`@orquestra/runner`](../runner/README.md).
 
 ---
 
 ## Install
+
 ```bash
-npm i -D @orquestra/core testcontainers supertest
+npm i -D @orquestra/core @orquestra/runner
 ```
-Add an HTTP adapter based on your framework:
+
+Pick an HTTP adapter:
+
 ```bash
 npm i -D @orquestra/adapter-express   # or @orquestra/adapter-fastify
 ```
 
 ---
 
-## Quickstart
-```ts
-import { Orquestra } from '@orquestra/core';
-import { OrquestraAdapterExpress } from '@orquestra/adapter-express';
-import { createApp } from './app';
+## Public API
 
-const orquestra = new Orquestra({
-  httpServer: async () => {
-    const { app, close } = await createApp();
-    const adapter = new OrquestraAdapterExpress(app);
-    adapter.setCloseHandler(close);
-    return adapter;
-  },
-});
+| Export | Purpose |
+|---|---|
+| `Orquestra` | Library-mode entry point (when not using the CLI) |
+| `orquestra`, `initOrquestra`, `getOrquestraInstance` | Global instance used by feature files under the CLI |
+| `defineConfig`, `defineSpec` | Identity helpers with type-hinting |
+| `OrquestraPlugin`, `OrquestraService`, `OrquestraHelper`, `OrquestraContainer`, `OrquestraMacro` | Injectable base classes |
+| `OrquestraHttpServer`, `HttpServerAdapter` | HTTP abstraction consumed by the adapters |
+| `OrquestraReporter`, `OrquestraConsoleReporter`, `OrquestraHtmlReporter` | Reporter API and built-ins |
+| `EnvHelper`, `Logger` | Utilities |
 
-beforeAll(() => orquestra.start());
-afterAll(() => orquestra.teardown());
-
-test('health', async () => {
-  const res = await orquestra.http.get('/');
-  expect(res.statusCode).toBe(200);
-});
-```
+Types worth knowing:
+`OrquestraConfig`, `OrquestraSpec`, `OrquestraArtifact`, `StepEvent`,
+`FeatureMeta`, `OrquestraRegistry`.
 
 ---
 
-## Core Concepts
-- **Single instance**: one `Orquestra` per test run; reuse across suites for speed.
-- **DI/Context**: register containers, helpers, services, plugins, macros. Resolve with `orquestra.get(Token)`.
-- **HTTP adapter**: wraps your app and exposes a Supertest client via `orquestra.http`.
-- **BDD**: define features and scenarios with `given/when/then`, get typed context and reporting.
-- **Env helper**: capture/override/restore environment variables safely during tests.
+## Core concepts
+
+### Feature, Scenario, Step
+
+```typescript
+import { strictEqual } from "node:assert";
+import { orquestra } from "@orquestra/core";
+
+const feature = orquestra.feature("create user", {
+  context: "Registration is the entry point of the platform.",
+  domain: "user management",
+  as: "unauthenticated visitor",
+  I: "want to register",
+  so: "I can use the app",
+});
+
+feature
+  .scenario("creates with valid data")
+  .given("valid credentials", () => ({ user: { email: "a@a.com", password: "123" } }))
+  .when("I POST /users", async ({ user }) => {
+    const response = await orquestra.http.post("/users").send(user);
+    return { response };
+  })
+  .then("returns 201", ({ response }) => {
+    strictEqual(response.statusCode, 201);
+  });
+```
+
+The context flows through the chain with type inference. `given`/`when`/`then`
+each return a new `Scenario<C & T>` where `T` is the return type of the step
+function.
+
+### Pending steps
+
+A step without an implementation is marked as `pending`. Useful for
+specification-first workflows:
+
+```typescript
+feature
+  .scenario("it should alert when production drops below threshold")
+  .given("the estimate was 2000kg")
+  .when("I register a harvest of 1300kg")
+  .then("an alert should be emitted");
+```
+
+The scenario is registered in the artifact with `status: "pending"`. The PO
+writes specs; the dev implements later.
+
+### Injectable base classes
+
+All components (services, plugins, helpers, containers, macros) extend
+`Injectable` and receive `ctx` in the constructor. A scoped `this.logger`
+(prefixed with the class name, NestJS-style) is available automatically.
+
+```typescript
+import { OrquestraService } from "@orquestra/core";
+
+export class UserService extends OrquestraService {
+  async onStart() {
+    this.logger.info("starting");
+  }
+
+  async createUser(email: string) {
+    // ...
+  }
+}
+```
+
+### Macros
+
+Macros are reusable steps referenced by title. Declare the context type on the
+generic for downstream type inference:
+
+```typescript
+import { OrquestraMacro } from "@orquestra/core";
+
+export interface CreateUserMacroContext {
+  user: { id: number; email: string };
+}
+
+export class CreateUserMacro extends OrquestraMacro<CreateUserMacroContext> {
+  override title = "there is a user registered in database";
+
+  async execute(): Promise<CreateUserMacroContext> {
+    const user = await this.ctx.container.get(UserService).create({ email: "a@a.com" });
+    return { user };
+  }
+}
+```
+
+Inside a scenario, just reference the title:
+
+```typescript
+feature
+  .scenario("list users")
+  .given("there is a user registered in database") // uses the macro above
+  .then("I see the user", ({ user }) => { /* user is typed as the macro context */ });
+```
+
+### Plugins
+
+Plugins add behavior to the test environment: register services, install HTTP
+hooks, manage state.
+
+```typescript
+import { OnStart, OrquestraHttpServer, OrquestraPlugin } from "@orquestra/core";
+import { AuthService } from "./services";
+
+export class AuthPlugin extends OrquestraPlugin implements OnStart {
+  private token: string | null = null;
+
+  async onStart() {
+    const httpServer = this.ctx.container.get(OrquestraHttpServer);
+    this.ctx.registerServices([AuthService]);
+
+    httpServer.addPreRequestHook((agent) => {
+      if (this.token) agent.set("Authorization", `Bearer ${this.token}`);
+    }, "all");
+  }
+
+  setToken(token: string) { this.token = token; }
+  clearToken() { this.token = null; }
+}
+```
+
+Trivial plugins that only register services can be avoided — put the service
+directly under `worker.services` in the config.
+
+### Helpers
+
+Helpers run before plugins/services and can depend on envs written by
+containers. They're the right place for per-worker setup:
+
+```typescript
+import { EnvHelper, OnStart, OrquestraHelper } from "@orquestra/core";
+
+export class WorkerIsolationHelper extends OrquestraHelper implements OnStart {
+  async onStart() {
+    const env = this.ctx.container.get(EnvHelper);
+    const workerId = process.env.ORQUESTRA_WORKER_ID ?? "0";
+
+    const base = env.get("DATABASE_BASE_URL");
+    if (base) {
+      const schema = `test_worker_${workerId}`;
+      // ... create schema + override DATABASE_URL with search_path
+    }
+  }
+}
+```
+
+### Containers
+
+Wrappers around `testcontainers`. Subclass `OrquestraContainer` and expose the
+connection details through `EnvHelper.override(...)`:
+
+```typescript
+import { EnvHelper, OrquestraContainer } from "@orquestra/core";
+import { PostgreSqlContainer, StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { Wait } from "testcontainers";
+
+export class PostgresContainer extends OrquestraContainer<StartedPostgreSqlContainer> {
+  containerName = "postgres";
+
+  async up() {
+    const container = await new PostgreSqlContainer("postgres:16-alpine")
+      .withWaitStrategy(Wait.forHealthCheck())
+      .start();
+    const env = this.ctx.container.get(EnvHelper);
+    env.override("DATABASE_BASE_URL", container.getConnectionUri());
+    return container;
+  }
+}
+```
+
+### IoC container (`ctx.container`)
+
+Type inference works automatically when you pass a class:
+
+```typescript
+const auth = orquestra.get(AuthService);          // AuthService
+const env = this.ctx.container.get(EnvHelper);    // EnvHelper
+```
+
+For string/Symbol tokens, pass a generic explicitly:
+
+```typescript
+const secret = orquestra.get<string>("JWT_SECRET");
+```
 
 ---
 
 ## Lifecycle
-Order of operations and where your code runs:
-1) Helpers onStart
-2) Containers start (with dependency ordering)
-3) HTTP server start
-4) Plugins onStart
-5) Services onStart
-6) Macros onStart
 
-Teardown runs in the safe reverse order. It does **not** print any BDD report by default — reporters are opt-in via `orquestra.report()` (see [Reporters & Run Artifacts](#reporters--run-artifacts)).
+```
+start()
+  1. resolveEnvHelper()        — loads .env, values from config
+  2. startContainers()         — topological order based on dependsOn
+  3. startHelpers()            — after containers (so they can read envs)
+  4. startHttpServer()         — adapter.createClient() available
+  5. startPlugins()
+  6. startServices()
+  7. startMacros()
 
-Methods:
-- `await orquestra.start(options?)` – boot all components (skip containers with `{ skipContainers: true }`). Also writes the run manifest and prunes old runs according to `historyLimit`.
-- `await orquestra.teardown()` – gracefully stop everything. Silent by default.
-- `await orquestra.report(reporter)` – read the current run's persisted events and pass them to a reporter. Can be called before or after `teardown()` and multiple times.
-- `await orquestra.provision()` / `await orquestra.deprovision()` – start/stop infra only (helpers, containers, plugins, services, macros).
+teardown()
+  1. teardownMacros()
+  2. teardownServices()
+  3. teardownPlugins()
+  4. teardownHttpServer()
+  5. teardownContainers()      — reverse dependency order
+  6. teardownHelpers()
+```
+
+Under the CLI runner, the lifecycle is split:
+- `provision()` on the main process: containers only
+- `start({ skipContainers: true })` on each worker: everything else
+
+See [`@orquestra/runner`](../runner/README.md) for details.
 
 ---
 
-## API Overview
-```ts
-new Orquestra({
-  httpServer?: IHttpServerAdapter | () => IHttpServerAdapter | Promise<IHttpServerAdapter>;
-  plugins?: Array<PluginProvider>;
-  helpers?: Array<HelperProvider>;
-  containers?: Array<ContainerProvider>;
-  services?: Array<ServiceProvider>;
-  macros?: Array<MacroProvider>;
-  env?: LoadEnvOptions;
-  logger?: Logger;
-  historyLimit?: number; // how many runs to keep under `.orquestra/`. Default: 1 (only the current run).
+## Reporters
+
+A reporter receives the fully-rendered `OrquestraArtifact`:
+
+```typescript
+import type { OrquestraArtifact, ReporterContext } from "@orquestra/core";
+import { OrquestraReporter } from "@orquestra/core";
+
+export class JUnitReporter extends OrquestraReporter {
+  run(artifact: OrquestraArtifact, ctx?: ReporterContext) {
+    const xml = toJUnitXml(artifact);
+    // write to ctx.outputDir if provided, or anywhere you want
+  }
+}
+```
+
+Register reporters in the config:
+
+```typescript
+reporters: [
+  new OrquestraConsoleReporter(),
+  new OrquestraHtmlReporter({ outputDir: "html" }),
+  new JUnitReporter(),
+]
+```
+
+Built-in reporters:
+
+- `OrquestraConsoleReporter` — Gherkin-colored tree with durations, errors
+- `OrquestraHtmlReporter` — standalone HTML (file://-friendly) with tabs for
+  Suites, Personas, Glossary; collapsed by default; dark-mode aware
+
+Reporter errors never abort the run — each reporter is isolated.
+
+---
+
+## OrquestraRegistry — typed business vocabulary
+
+Feature files reference personas, domains, and macro titles as **strings**. By
+default, these are loose strings. After running `npx orquestra types`, the
+generated `.orquestra/orquestra.d.ts` augments the registry and turns them into
+typed unions with autocomplete and inference:
+
+```typescript
+// Before types are generated: string literal unions fall back to `string`
+orquestra.feature("x", { as: "registered user", ... });
+
+// After types are generated: autocomplete + type errors on typos
+orquestra.feature("x", {
+  as: "registered user" | "unauthenticated visitor" | ..., // from all `as` values
+  domain: "user management" | "integrations" | ...,        // from spec + features[].domain
 });
 
-// Runtime
+// And macro titles infer the resulting context:
+.given("there is a user registered in database") // knows this adds { user: UserEntity }
+.then("check email", ({ user }) => { /* user is typed */ });
+```
+
+The generator is part of `@orquestra/runner`. See
+[`@orquestra/runner` docs](../runner/README.md) for details.
+
+---
+
+## Library-mode vs CLI-mode
+
+The CLI (`npx orquestra test`) is the recommended entry point: it loads your
+config, spawns workers, handles lifecycle, generates artifacts. For that mode,
+you import the `orquestra` global from `@orquestra/core`.
+
+If you need to drive Orquestra from your own code (embedding in a custom
+runner, for example), you can still use `new Orquestra(options)` directly:
+
+```typescript
+import { Orquestra } from "@orquestra/core";
+
+const orquestra = new Orquestra({ /* options */ });
 await orquestra.start();
+// ... use orquestra.feature() etc
 await orquestra.teardown();
-await orquestra.report(new OrquestraConsoleReporter());
-await orquestra.provision();
-await orquestra.deprovision();
-
-// DI
-const service = orquestra.get<MyService>(MyService);
-
-// HTTP
-const res = await orquestra.http.get('/path');
-```
-
-Provider forms:
-- Class: `MyService`
-- Value: `{ provide: Token, useValue: instance }`
-- Factory: `{ provide: Token, useFactory: (ctx) => new Impl(ctx) }`
-
----
-
-## HTTP Client, Hooks and Closing
-`orquestra.http` is a Supertest agent with all HTTP verbs.
-
-- Pre-request hooks (add headers, auth, etc.):
-```ts
-import { HttpMethod } from '@orquestra/core';
-
-// via adapter instance (e.g., inside a plugin or setup)
-const http = orquestra.get(OrquestraHttpServer);
-http.addPreRequestHook(agent => agent.set('X-Test', '1'), 'all' satisfies HttpMethod | 'all');
-```
-
-- Graceful close:
-```ts
-const adapter = new OrquestraAdapterExpress(app);
-adapter.setCloseHandler(async () => app.close?.());
-```
-
-- Unwrap the underlying app if needed:
-```ts
-const httpSrv = orquestra.get(OrquestraHttpServer);
-const express = httpSrv.unwrap();
 ```
 
 ---
 
-## Containers with Dependencies
-Containers are DI components that manage external infra (e.g., Postgres, RabbitMQ). They start with dependency ordering and stop respecting reverse dependencies.
+## Requirements
 
-Important: you only need to implement `up()` and return a `StartedTestContainer`. When `up()` returns the started container, Orquestra will automatically stop it during teardown; you do not need to implement `stop()` yourself.
-
-```ts
-import { OrquestraContainer } from '@orquestra/core';
-import { StartedTestContainer } from 'testcontainers';
-
-class PostgresContainer extends OrquestraContainer<StartedTestContainer> {
-  containerName = 'postgres';
-  async up() {
-    // start and return StartedTestContainer
-    // e.g. return await new PostgreSqlContainer('postgres:16').start();
-  }
-}
-
-new Orquestra({
-  containers: [
-    { container: PostgresContainer },
-    // or with dependencies
-    { container: AppDepsContainer, dependsOn: [PostgresContainer] },
-  ],
-});
-```
-
----
-
-## Jest/Vitest workers and sharing infrastructure
-Most runners (Jest/Vitest) execute tests in multiple workers. Importing `Orquestra` inside each test file creates a new instance per worker, so you typically start/teardown per file.
-
-If you want to provision the infrastructure once and reuse it, export a single instance and call `provision`/`deprovision` in the global setup/teardown. Then, in setup files (or per suite), use `start({ skipContainers: true })` and `teardown()`.
-
-### Shared single instance
-```ts
-// test/orquestra.instance.ts
-import { Orquestra } from '@orquestra/core';
-import { OrquestraAdapterExpress } from '@orquestra/adapter-express';
-import { createApp } from '../src/app';
-
-export const orquestra = new Orquestra({
-  httpServer: async () => {
-    const { app, close } = await createApp();
-    const adapter = new OrquestraAdapterExpress(app);
-    adapter.setCloseHandler(close);
-    return adapter;
-  },
-  // containers, plugins, services, macros ...
-});
-```
-
-### Jest (global setup/teardown + setup files)
-```ts
-// test/global-setup.ts
-import { orquestra } from './orquestra.instance';
-export default async function () {
-  await orquestra.provision();
-}
-```
-```ts
-// test/global-teardown.ts
-import { orquestra } from './orquestra.instance';
-export default async function () {
-  await orquestra.deprovision();
-}
-```
-```ts
-// test/setup-tests.ts (runs in each worker)
-import { orquestra } from './orquestra.instance';
-
-beforeAll(async () => {
-  await orquestra.start({ skipContainers: true });
-});
-
-afterAll(async () => {
-  await orquestra.teardown();
-});
-```
-Notes:
-- Global setup and teardown import the same module, thus share the same `orquestra` instance.
-- Test files should import utilities/services from `orquestra` as needed.
-
-### Vitest (return a teardown function from globalSetup)
-```ts
-// test/global-setup.ts
-import { orquestra } from './orquestra.instance';
-
-export default async function () {
-  await orquestra.provision();
-  return async () => {
-    await orquestra.deprovision();
-  };
-}
-```
-```ts
-// test/setup-tests.ts (executed in each worker)
-import { orquestra } from './orquestra.instance';
-import { beforeAll, afterAll } from 'vitest';
-
-beforeAll(async () => {
-  await orquestra.start({ skipContainers: true });
-});
-
-afterAll(async () => {
-  await orquestra.teardown();
-});
-```
-
----
-
-## Env Helper
-```ts
-import { EnvHelper } from '@orquestra/core';
-
-const env = orquestra.get<EnvHelper>(EnvHelper);
-env.override('FOO', 'bar');
-// ...
-env.restore('FOO');
-```
-
-You can also inject static values at boot:
-```ts
-new Orquestra({
-  env: { fromValues: { JWT_SECRET: 'test-secret' } },
-});
-```
-
----
-
-## BDD: Features, Scenarios, Steps
-Define high-level behavior with a typed, minimal API and get automatic reporting.
-
-```ts
-const feature = orquestra.feature('create user', {
-  as: 'unauthenticated visitor',
-  I: 'want to register',
-  so: 'I can use the app',
-});
-
-feature
-  .scenario('success path')
-  .given('I have a valid email and password', () => {
-    return { user: { email: 'a@b.com', password: 's3cret' } };
-  })
-  .when('I send a POST request to "/users"', async ({ user }) => {
-    const res = await orquestra.http.post('/users').send(user);
-    return { res };
-  })
-  .then('should return 200', ({ res }) => {
-    expect(res.status).toBe(200);
-  });
-
-await feature.test();
-```
-
-- Reuse steps via Macros:
-```ts
-import { OrquestraMacro } from '@orquestra/core';
-
-class CreateUserMacro extends OrquestraMacro {
-  title = 'there is a user registered in database';
-  async execute() {
-    // create user via service/helper and return context
-    return { userId: 1 };
-  }
-}
-
-new Orquestra({ macros: [CreateUserMacro] });
-
-feature
-  .scenario('contract creation')
-  .given('there is a user registered in database') // uses macro by title
-  .when('I send a POST to "/contracts"', async ({ userId }) => { /* ... */ });
-```
-
-Reporting is decoupled from `teardown()` — see [Reporters & Run Artifacts](#reporters--run-artifacts) below.
-
----
-
-## Reporters & Run Artifacts
-
-### Run artifacts on disk
-Every `orquestra.start()` creates a directory `.orquestra/<runId>/` in the current working directory, containing:
-- `manifest.json` – `{ orquestraVersion, createdAt, runId }`. Written at start. Used to detect incompatible runs when replaying.
-- `meta.json` – array of `{ feature, as, I, so }` per feature defined in the run. Written when `feature.test()` is called.
-- `<timestamp>-<pid>-<rand>.json` – one file per step event (`pending` → `success`/`failed`).
-
-### Opt-in reporting
-`teardown()` no longer prints anything. To render a report, call `orquestra.report(reporter)` explicitly — before or after teardown, as many times as you want:
-
-```ts
-import { Orquestra, OrquestraConsoleReporter } from '@orquestra/core';
-
-afterAll(async () => {
-  await orquestra.report(new OrquestraConsoleReporter());
-  await orquestra.teardown();
-});
-```
-
-Output example:
-```
-Feature: create user
-  As an unauthenticated visitor
-  I want to register
-  So that I can use the app
-
-  Scenario: success path
-    ├── ✓ Given I have a valid email and password
-    ├── ✓ When I send a POST request to "/users"
-    └── ✓ Then should return 200
-```
-
-### Custom reporters
-Extend `OrquestraReporter` and receive the same `events` + `meta` the console reporter uses. Useful for HTML/JSON/TAP output or pushing to an external dashboard.
-
-```ts
-import { OrquestraReporter, StepEvent, FeatureMeta } from '@orquestra/core';
-
-class JsonReporter extends OrquestraReporter {
-  async run(events: StepEvent[], meta: FeatureMeta[]): Promise<void> {
-    await writeFile('report.json', JSON.stringify({ events, meta }, null, 2));
-  }
-}
-
-await orquestra.report(new JsonReporter());
-```
-
-### Run history (`historyLimit`)
-By default (`historyLimit: 1`), only the current run's directory is kept and every previous run under `.orquestra/` is deleted at the next `start()`. Increase it if you want to keep history for retroactive reporting:
-
-```ts
-new Orquestra({ historyLimit: 5 }); // keep the 4 most recent previous runs + the current one
-```
-
-Only directories with a valid UUID name are considered — any other file or folder under `.orquestra/` is left untouched.
-
-### Version compatibility
-When `report()` runs, it reads the run's `manifest.json` and compares its `orquestraVersion` against the currently installed `@orquestra/core`:
-- Same major/minor → processes silently.
-- Same major, different minor → logs a warning but processes.
-- Different major → throws, aborting the report.
-- Missing manifest (legacy run) → logs a warning and processes best-effort.
-
----
-
-## Plugins & Services
-Plugins and Services are DI components with optional lifecycle hooks:
-- `onStart()` – called after HTTP server is ready
-- `onTeardown()` – called during teardown
-
-Example factory provider receiving the Context:
-```ts
-new Orquestra({
-  plugins: [
-    {
-      provide: AuthPlugin,
-      useFactory: (ctx) => new AuthPlugin(ctx),
-    },
-  ],
-});
-```
-
----
-
-## Logging
-Provide a custom `logger` implementing the `Logger` interface to integrate with your logging stack. If omitted, a sensible default logger is used. Lifecycle actions (start/stop per component) are logged with durations.
-
----
-
-## Best Practices
-- Share one `Orquestra` instance across suites to minimize boot time.
-- Use container dependency ordering for reliable startup/shutdown.
-- Add pre-request hooks for auth headers.
-- Truncate or reset DB state in `beforeEach`.
-- In CI, consider increasing timeouts for slower environments.
+- Node.js >= 22
+- TypeScript 5.0+

@@ -7,7 +7,7 @@ export class TestDatabaseService extends OrquestraService implements OnStart {
 	}
 
 	async query(query: string) {
-		const env = this.ctx.container.get<EnvHelper>(EnvHelper);
+		const env = this.ctx.container.get(EnvHelper);
 		const databaseUrl = env.get("DATABASE_URL");
 		const client = new Client(databaseUrl);
 

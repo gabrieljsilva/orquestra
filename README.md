@@ -1,70 +1,178 @@
-# Orquestra – Integration Test Orchestration for Node.js/TypeScript
+# Orquestra
 
-> One‑liner: Spin up Docker containers, start your HTTP server, inject typed helpers, connect plugins (GraphQL, AMQP, etc.) – all from a single, shareable instance across your test suites.
+> **Business-Oriented Software Specification for Node.js/TypeScript.**
+> Specs that test. Tests that document. Documentation that LLMs understand.
 
 ---
 
 ## What is Orquestra?
-Orquestra is a pragmatic toolkit to orchestrate realistic integration test environments. It manages the full lifecycle of your test stack:
-- **Containers**: Start/stop dependent services (e.g., Postgres, RabbitMQ) with dependency ordering.
-- **HTTP server**: Wrap your app with an adapter (Express/Fastify) and get a Supertest client.
-- **Plugins & Helpers**: Register injectable utilities and clients to keep tests concise and reusable.
-- **BDD**: Define features, scenarios, and steps with a minimal, strongly-typed API; collect step events for reporting.
 
-Built for speed, clarity, and reliability on CI.
+Orquestra is a code-first BDD platform with its own test runner. Instead of
+writing generic test functions, you describe your software in terms of
+**personas**, **domains**, **features**, and **scenarios** — all in TypeScript,
+with type inference.
+
+The runner executes those specs against real infrastructure (containers, HTTP
+servers, brokers), produces a **structured artifact** (`artifact.json`) that
+LLMs and dashboards can consume, and emits a HTML report for humans.
+
+```typescript
+// create-user.feature.ts
+import { orquestra } from "@orquestra/core";
+
+const feature = orquestra.feature("create user", {
+  context: "Registration is the entry point of the platform. Without it, no other module works.",
+  domain: "user management",
+  as: "unauthenticated visitor",
+  I: "want to register",
+  so: "I can use the platform",
+});
+
+feature
+  .scenario("should create a user with valid data")
+  .given("I have valid email and password", () => ({ user: { email: "a@a.com", password: "123" } }))
+  .when('I send POST to "/users"', async ({ user }) => {
+    const response = await orquestra.http.post("/users").send(user);
+    return { response };
+  })
+  .then("should return 201", ({ response }) => {
+    strictEqual(response.statusCode, 201);
+  });
+```
+
+```bash
+npx orquestra test
+```
 
 ---
 
-## Packages in this monorepo
-- `@orquestra/core`: Main orchestration engine (lifecycle, DI/Context, BDD, HTTP client, env helper).
-- `@orquestra/adapter-express`: HTTP adapter for Express apps.
-- `@orquestra/adapter-fastify`: HTTP adapter for Fastify apps.
+## Why?
 
-Each package has its own README with focused instructions and examples.
+Most BDD tools sit on top of Jest/Vitest and produce pass/fail. Orquestra is
+designed to let the *business layer* live in code:
+
+- **Personas** (the `as` in each feature) are extracted automatically
+- **Domains** group features by bounded context
+- **Context** captures *why* a feature exists — the business driver
+- **Glossary** encodes the ubiquitous language of the project
+
+All of this ends up in a structured `artifact.json` — the single source of
+truth for tests, docs, and AI tooling.
+
+**No other BDD tool in the JS ecosystem does this.**
+
+---
+
+## Packages
+
+| Package | What it does |
+|---|---|
+| [`@orquestra/core`](./packages/core/README.md) | BDD engine, IoC container, lifecycle, reporters |
+| [`@orquestra/runner`](./packages/runner/README.md) | CLI, config loader, feature discovery, parallelism via IPC, type generation |
+| [`@orquestra/adapter-express`](./packages/adapter-express/README.md) | HTTP adapter for Express |
+| [`@orquestra/adapter-fastify`](./packages/adapter-fastify/README.md) | HTTP adapter for Fastify |
 
 ---
 
 ## Quickstart
-Install the core and at least one HTTP adapter:
+
+Install the packages:
+
 ```bash
-npm i -D @orquestra/core @orquestra/adapter-express testcontainers supertest
+npm i -D @orquestra/core @orquestra/runner @orquestra/adapter-express
 ```
 
-Basic usage:
-```ts
-import { Orquestra } from '@orquestra/core';
-import { OrquestraAdapterExpress } from '@orquestra/adapter-express';
-import { createApp } from './app';
+Create `orquestra.config.ts`:
 
-const orquestra = new Orquestra({
+```typescript
+import { resolve } from "node:path";
+import { OrquestraAdapterExpress } from "@orquestra/adapter-express";
+import { OrquestraConsoleReporter, OrquestraHtmlReporter, defineConfig } from "@orquestra/core";
+import { createApp } from "./app";
+
+export default defineConfig({
   httpServer: async () => {
     const { app, close } = await createApp();
     const adapter = new OrquestraAdapterExpress(app);
     adapter.setCloseHandler(close);
     return adapter;
   },
+  testMatch: ["**/*.feature.ts"],
+  outputDir: resolve(import.meta.dirname, ".orquestra"),
+  reporters: [new OrquestraConsoleReporter(), new OrquestraHtmlReporter()],
+});
+```
+
+Write a feature:
+
+```typescript
+// features/health.feature.ts
+import { strictEqual } from "node:assert";
+import { orquestra } from "@orquestra/core";
+
+const feature = orquestra.feature("health check", {
+  as: "any client",
+  I: "want to verify the service is up",
+  so: "I can trust my monitoring",
 });
 
-beforeAll(() => orquestra.start());
-afterAll(() => orquestra.teardown());
+feature
+  .scenario("root endpoint responds")
+  .when("I GET /", async () => {
+    const response = await orquestra.http.get("/");
+    return { response };
+  })
+  .then("returns 200", ({ response }) => {
+    strictEqual(response.statusCode, 200);
+  });
+```
 
-test('health', async () => {
-  const res = await orquestra.http.get('/');
-  expect(res.statusCode).toBe(200);
-});
+Run:
+
+```bash
+npx orquestra test
 ```
 
 ---
 
-## Why Orquestra?
-- **Realistic tests**: Exercise your app against real infra, not mocks.
-- **Deterministic lifecycle**: Ordered startup/shutdown, dependency graph, and clean teardown.
-- **Ergonomics**: One instance, shared across suites; injectable services; pre-request hooks.
-- **Extensible**: Plugins, macros, helpers, and adapters.
+## Key ideas
+
+- **Three files, three responsibilities**
+  - `orquestra.config.ts` — technical config (containers, HTTP server, plugins, reporters)
+  - `orquestra.spec.ts` — business knowledge (glossary, domains)
+  - `*.feature.ts` — behaviors (features, scenarios, steps)
+
+- **Owned runner, not a Vitest/Jest plugin** — Orquestra spawns workers, owns the
+  lifecycle, handles provision/teardown, aggregates events via IPC.
+
+- **Parallelism with isolation** — `concurrency: N` spawns N workers with a
+  work-stealing queue. Each worker has `ORQUESTRA_WORKER_ID`; your `IsolationHelper`
+  uses it to scope DB schemas, RabbitMQ queues, etc.
+
+- **Type generation** — `npx orquestra types` reads your config, spec, and
+  feature files, then emits `.orquestra/orquestra.d.ts` that augments the
+  `OrquestraRegistry` interface. This enables autocomplete for personas/domains
+  and type inference from macros.
+
+- **Artifact-first reporting** — every run produces `artifact.json`. Reporters
+  (console, HTML, and any you write) consume it.
 
 ---
 
-## Learn more
-- Core: see `packages/core/README.md` for full guide, lifecycle, BDD, reporters, and logs.
-- Express adapter: `packages/adapter-express/README.md`.
-- Fastify adapter: `packages/adapter-fastify/README.md` (server must be ready before use).
+## Migrating from v0.x
+
+The v1 is a breaking change. Read [`MIGRATION.md`](./MIGRATION.md) for a
+side-by-side comparison of the old and new APIs.
+
+---
+
+## Requirements
+
+- Node.js >= 22
+- TypeScript (recommended)
+
+---
+
+## License
+
+MIT
