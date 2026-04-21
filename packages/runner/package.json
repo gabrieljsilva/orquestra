@@ -1,6 +1,6 @@
 {
 	"name": "@orquestra/runner",
-	"version": "1.0.0",
+	"version": "2.0.0",
 	"main": "dist/index.cjs.js",
 	"module": "dist/index.esm.js",
 	"types": "dist/index.d.ts",
@@ -24,7 +24,7 @@
 		"build": "rollup -c"
 	},
 	"dependencies": {
-		"@orquestra/core": "^1.0.0",
+		"@orquestra/core": "^2.0.0",
 		"citty": "^0.1.6",
 		"jiti": "^2.6.1"
 	},

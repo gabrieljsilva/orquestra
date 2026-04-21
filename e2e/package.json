@@ -1,6 +1,6 @@
 {
 	"name": "@workspace/orquestra-e2e",
-	"version": "1.1.1",
+	"version": "1.1.2",
 	"private": true,
 	"scripts": {
 		"test": "vitest --config ../vitest.e2e.config.ts --run",
@@ -8,9 +8,9 @@
 	},
 	"dependencies": {
 		"@faker-js/faker": "^9.9.0",
-		"@orquestra/adapter-express": "^1.0.0",
-		"@orquestra/adapter-fastify": "^1.0.0",
-		"@orquestra/core": "^1.0.0",
+		"@orquestra/adapter-express": "^2.0.0",
+		"@orquestra/adapter-fastify": "^2.0.0",
+		"@orquestra/core": "^2.0.0",
 		"@testcontainers/postgresql": "^11.5.1",
 		"@testcontainers/rabbitmq": "^11.5.1",
 		"@types/amqplib": "^0.10.5",
