@@ -5,6 +5,7 @@
 	"fixed": [
 		[
 			"@orquestra/core",
+			"@orquestra/runner",
 			"@orquestra/adapter-express",
 			"@orquestra/adapter-fastify"
 		]
