@@ -1,10 +1,13 @@
+import { Logger } from "@orquestra/core";
 import amqplib, { Channel } from "amqplib";
 import { retryUntil } from "./utils";
+
+const logger = new Logger({ level: "info", prefix: "API" });
 
 export async function createRabbitMQConnection() {
 	let retryCount = 0;
 	return retryUntil(async () => {
-		console.info(`[API]: Creating RabbitMQ connection: ${retryCount++}/5`);
+		logger.info(`Creating RabbitMQ connection: ${retryCount++}/5`);
 		const connectionUrl = process.env.RABBITMQ_URL;
 
 		if (!connectionUrl) {
@@ -15,7 +18,7 @@ export async function createRabbitMQConnection() {
 
 		const ch = await conn.createChannel();
 
-		console.info("[API]: RabbitMQ connection created");
+		logger.info("RabbitMQ connection created");
 
 		return {
 			connection: conn,

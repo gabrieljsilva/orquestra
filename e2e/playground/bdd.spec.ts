@@ -1,5 +1,5 @@
 import { faker } from "@faker-js/faker";
-import { Orquestra, OrquestraConsoleReporter } from "@orquestra/core";
+import { Orquestra } from "@orquestra/core";
 import { Factory } from "decorated-factory";
 import { UserEntity } from "./app";
 import { CreateUserOrquestraMacro } from "./macros/create-user.orquestra-macro";
@@ -22,7 +22,6 @@ describe("user", () => {
 	});
 
 	afterAll(async () => {
-		await orquestra.report(new OrquestraConsoleReporter());
 		await orquestra.teardown();
 	});
 

@@ -1,7 +1,11 @@
-import { EnvHelper, OrquestraService } from "@orquestra/core";
+import { EnvHelper, type OnStart, OrquestraService } from "@orquestra/core";
 import { Client } from "pg";
 
-export class TestDatabaseService extends OrquestraService {
+export class TestDatabaseService extends OrquestraService implements OnStart {
+	async onStart() {
+		await this.migrate();
+	}
+
 	async query(query: string) {
 		const env = this.ctx.container.get<EnvHelper>(EnvHelper);
 		const databaseUrl = env.get("DATABASE_URL");
@@ -18,7 +22,7 @@ export class TestDatabaseService extends OrquestraService {
 	}
 
 	async migrate() {
-		console.info("[Orquestra]: Running migrations");
+		this.logger.info("Running migrations");
 		await this.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -26,10 +30,13 @@ export class TestDatabaseService extends OrquestraService {
                 email VARCHAR(255) NOT NULL,
                 password VARCHAR(255) NOT NULL
             );`);
-		console.info("[Orquestra]: Migrations finished");
+		this.logger.info("Migrations finished");
 	}
 
 	async truncate() {
+		const env = this.ctx.container.get<EnvHelper>(EnvHelper);
+		const schema = env.get("DATABASE_SCHEMA") || "public";
+
 		const query = `
             DO
             $$
@@ -41,15 +48,16 @@ export class TestDatabaseService extends OrquestraService {
                        || ' RESTART IDENTITY CASCADE'
                   INTO stmt
                   FROM pg_tables
-                 WHERE schemaname NOT IN ('pg_catalog', 'information_schema');
-                RAISE NOTICE 'Executando: %', stmt;
-                EXECUTE stmt;
+                 WHERE schemaname = '${schema}';
+                IF stmt IS NOT NULL THEN
+                    EXECUTE stmt;
+                END IF;
             END;
             $$;
 		`;
 
-		console.info("[ORQUESTRA]: Truncating tables");
+		this.logger.info(`Truncating tables in schema ${schema}`);
 		await this.query(query);
-		console.info("[ORQUESTRA]: Tables truncated");
+		this.logger.info("Tables truncated");
 	}
 }

@@ -73,7 +73,10 @@ export async function createApp() {
 		res.send({ sent: true });
 	});
 
-	await consumeFromRabbitMQ(rabbitConnection.channel, "users", "users.created", async (msg) => {
+	const usersExchange = process.env.USERS_EXCHANGE || "users";
+	const usersQueue = process.env.USERS_QUEUE || "users.created";
+
+	await consumeFromRabbitMQ(rabbitConnection.channel, usersExchange, usersQueue, async (msg) => {
 		const { name, email, password } = msg;
 		await repository.createUser(name, email, password);
 	});

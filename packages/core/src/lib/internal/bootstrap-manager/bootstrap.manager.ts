@@ -126,20 +126,21 @@ export class BootstrapManager {
 	}
 
 	async provision() {
-		this.logger.info("Provisioning Orquestra Infra");
+		this.logger.info("Provisioning infra");
 
 		const startedAt = Date.now();
-		await this.startHelpers();
+		await this.resolveEnvHelper();
 		await this.startContainers();
+		await this.startHelpers();
 		await this.startPlugins();
 		await this.startServices();
 		await this.startMacros();
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`Orquestra Infra Provisioned in ${timeTaken}ms`);
+		this.logger.info(`Provision finished in ${timeTaken}ms`);
 	}
 
 	async deprovision() {
-		this.logger.info("Deprovisioning Orquestra Infra");
+		this.logger.info("Deprovisioning infra");
 
 		const startedAt = Date.now();
 		await this.teardownServices();
@@ -147,18 +148,20 @@ export class BootstrapManager {
 		await this.teardownContainers();
 		await this.teardownHelpers();
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`Orquestra Infra Deprovisioned in ${timeTaken}ms`);
+		this.logger.info(`Deprovision finished in ${timeTaken}ms`);
 	}
 
 	async start(options?: OrquestraBootstrapOptions) {
-		this.logger.info("Starting Orquestra");
+		this.logger.info("Starting");
 		const startedAt = Date.now();
 
-		await this.startHelpers();
+		await this.resolveEnvHelper();
 
 		if (!options?.skipContainers) {
 			await this.startContainers();
 		}
+
+		await this.startHelpers();
 
 		await this.startHttpServer();
 		await this.startPlugins();
@@ -166,11 +169,11 @@ export class BootstrapManager {
 		await this.startMacros();
 
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`Orquestra started in ${timeTaken}ms`);
+		this.logger.info(`Started in ${timeTaken}ms`);
 	}
 
 	async teardown(options?: OrquestraBootstrapOptions) {
-		this.logger.info("tearing down");
+		this.logger.info("Tearing down");
 		const startedAt = Date.now();
 
 		// Macros devem ser os primeiros a encerrar
@@ -186,13 +189,15 @@ export class BootstrapManager {
 		await this.teardownHelpers();
 
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`tearing down complete in ${timeTaken}ms`);
+		this.logger.info(`Teardown finished in ${timeTaken}ms`);
+	}
+
+	private async resolveEnvHelper() {
+		await this.context.container.resolve(this.context, EnvHelper);
 	}
 
 	private async startHelpers() {
-		await this.context.container.resolve(this.context, EnvHelper);
-
-		this.logger.info("starting helpers");
+		this.logger.debug("starting helpers");
 		const startedAt = Date.now();
 		const helpers = this.context.getHelperProviders();
 		for (const helper of helpers) {
@@ -201,7 +206,7 @@ export class BootstrapManager {
 			await helperInstance?.onStart?.();
 		}
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`helpers started in ${timeTaken}ms`);
+		this.logger.debug(`helpers started in ${timeTaken}ms`);
 	}
 
 	private getContainerToken(containerProvider: any): any {
@@ -238,7 +243,7 @@ export class BootstrapManager {
 	}
 
 	private async startContainers() {
-		this.logger.info("Starting containers");
+		this.logger.debug("Starting containers");
 		const startedAt = Date.now();
 		const graph = this.buildDependencyGraph();
 		const started = new Set<any>();
@@ -262,9 +267,9 @@ export class BootstrapManager {
 				this.context,
 				token,
 			);
-			this.logger.info(`Starting container: ${container.containerName}`);
+			this.logger.debug(`Starting container: ${container.containerName}`);
 			await container.start();
-			this.logger.info(`Container started: ${container.containerName}`);
+			this.logger.debug(`Container started: ${container.containerName}`);
 
 			started.add(token);
 			starting.delete(token);
@@ -273,11 +278,11 @@ export class BootstrapManager {
 		await Promise.all(Array.from(graph.keys()).map((token) => startContainer(token)));
 
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`Containers started in ${timeTaken}ms`);
+		this.logger.debug(`Containers started in ${timeTaken}ms`);
 	}
 
 	private async startHttpServer() {
-		this.logger.info("Starting HTTP server");
+		this.logger.debug("Starting HTTP server");
 		const startedAt = Date.now();
 
 		const adapterFactory =
@@ -288,17 +293,17 @@ export class BootstrapManager {
 		}
 
 		if (!this.context.container.get(OrquestraHttpServer)) {
-			this.logger.info("No HTTP server found - skipping");
+			this.logger.debug("No HTTP server found - skipping");
 			return;
 		}
 
 		await this.context.container.resolve<OrquestraHttpServer>(this.context, OrquestraHttpServer);
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`HTTP server started in ${timeTaken}ms`);
+		this.logger.debug(`HTTP server started in ${timeTaken}ms`);
 	}
 
 	private async startPlugins() {
-		this.logger.info("Starting plugins");
+		this.logger.debug("Starting plugins");
 		const startedAt = Date.now();
 		const plugins = this.context.getPluginProviders();
 		for (const plugin of plugins) {
@@ -307,11 +312,11 @@ export class BootstrapManager {
 			await pluginInstance?.onStart?.();
 		}
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`Plugins started in ${timeTaken}ms`);
+		this.logger.debug(`Plugins started in ${timeTaken}ms`);
 	}
 
 	private async startMacros() {
-		this.logger.info("Starting macros");
+		this.logger.debug("Starting macros");
 		const startedAt = Date.now();
 		const macros = this.context.getMacroProviders?.() ?? [];
 		const registry = await this.context.container.resolve<MacroRegistry>(this.context, MacroRegistry as any);
@@ -322,11 +327,11 @@ export class BootstrapManager {
 			await macroInstance?.onStart?.();
 		}
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`Macros started in ${timeTaken}ms`);
+		this.logger.debug(`Macros started in ${timeTaken}ms`);
 	}
 
 	private async teardownPlugins() {
-		this.logger.info("tearing down plugins");
+		this.logger.debug("tearing down plugins");
 		const startedAt = Date.now();
 		const plugins = this.context.getPluginProviders();
 		for (const plugin of plugins) {
@@ -335,11 +340,11 @@ export class BootstrapManager {
 			await instance?.onTeardown?.();
 		}
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`plugins stopped in ${timeTaken}ms`);
+		this.logger.debug(`plugins stopped in ${timeTaken}ms`);
 	}
 
 	private async teardownMacros() {
-		this.logger.info("tearing down macros");
+		this.logger.debug("tearing down macros");
 		const startedAt = Date.now();
 		const macros = this.context.getMacroProviders?.() ?? [];
 		for (const macro of macros) {
@@ -348,18 +353,18 @@ export class BootstrapManager {
 			await instance?.onTeardown?.();
 		}
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`macros stopped in ${timeTaken}ms`);
+		this.logger.debug(`macros stopped in ${timeTaken}ms`);
 	}
 
 	private async teardownHttpServer() {
 		try {
 			const httpServer = this.context.container.get<OrquestraHttpServer>(OrquestraHttpServer);
 			if (httpServer) {
-				this.logger.info("Closing HTTP server");
+				this.logger.debug("Closing HTTP server");
 				const startedAt = Date.now();
 				await httpServer.close();
 				const timeTaken = Date.now() - startedAt;
-				this.logger.info(`HTTP server closed in ${timeTaken}ms`);
+				this.logger.debug(`HTTP server closed in ${timeTaken}ms`);
 			}
 		} catch (error) {
 			this.logger.error(`Error closing HTTP server: ${error}`);
@@ -367,7 +372,7 @@ export class BootstrapManager {
 	}
 
 	private async teardownHelpers() {
-		this.logger.info("tearing down helpers");
+		this.logger.debug("tearing down helpers");
 		const startedAt = Date.now();
 		const helpers = this.context.getHelperProviders();
 		for (const helper of helpers) {
@@ -376,11 +381,11 @@ export class BootstrapManager {
 			await instance?.onTeardown?.();
 		}
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`helpers stopped in ${timeTaken}ms`);
+		this.logger.debug(`helpers stopped in ${timeTaken}ms`);
 	}
 
 	private async teardownContainers() {
-		this.logger.info("tearing down containers");
+		this.logger.debug("tearing down containers");
 		const startedAt = Date.now();
 		const containerTokens = new Set<any>();
 		const containers = this.context.getContainerProviders();
@@ -439,9 +444,9 @@ export class BootstrapManager {
 									this.context,
 									token,
 								);
-								this.logger.info(`Stopping container: ${container.containerName}`);
+								this.logger.debug(`Stopping container: ${container.containerName}`);
 								await container.stop();
-								this.logger.info(`Container stopped: ${container.containerName}`);
+								this.logger.debug(`Container stopped: ${container.containerName}`);
 								stoppedContainers.add(token);
 							} catch (error) {
 								this.logger.error(`Error stopping container: ${error}`);
@@ -460,9 +465,9 @@ export class BootstrapManager {
 							this.context,
 							token,
 						);
-						this.logger.info(`Stopping container: ${container.containerName}`);
+						this.logger.debug(`Stopping container: ${container.containerName}`);
 						await container.stop();
-						this.logger.info(`Container stopped: ${container.containerName}`);
+						this.logger.debug(`Container stopped: ${container.containerName}`);
 						stoppedContainers.add(token);
 					} catch (error) {
 						this.logger.error(`Error stopping container: ${error}`);
@@ -478,34 +483,34 @@ export class BootstrapManager {
 
 		await stopContainers();
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`containers stopped in ${timeTaken}ms`);
+		this.logger.debug(`containers stopped in ${timeTaken}ms`);
 	}
 
 	async startServices() {
-		this.logger.info("starting services");
+		this.logger.debug("starting services");
 		const startedAt = Date.now();
 
 		const services = this.context.getServiceProviders();
 		for (const service of services) {
 			const token = typeof service === "function" ? service : service.provide;
 			const instance = await this.context.container.resolve(this.context, token);
-			instance?.onStart?.();
+			await instance?.onStart?.();
 		}
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`services started in ${timeTaken}ms`);
+		this.logger.debug(`services started in ${timeTaken}ms`);
 	}
 
 	async teardownServices() {
-		this.logger.info("tearing down services");
+		this.logger.debug("tearing down services");
 		const startedAt = Date.now();
 
 		const services = this.context.getServiceProviders();
 		for (const service of services) {
 			const token = typeof service === "function" ? service : service.provide;
 			const instance = await this.context.container.resolve(this.context, token);
-			instance?.onTeardown?.();
+			await instance?.onTeardown?.();
 		}
 		const timeTaken = Date.now() - startedAt;
-		this.logger.info(`services stopped in ${timeTaken}ms`);
+		this.logger.debug(`services stopped in ${timeTaken}ms`);
 	}
 }

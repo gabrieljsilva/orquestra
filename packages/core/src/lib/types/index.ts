@@ -4,4 +4,6 @@ export * from "./ioc";
 export * from "./lifecycle";
 export * from "./orquestra";
 export * from "./reporting";
-export * from "./shard-manager";
+export * from "./events";
+export * from "./config";
+export * from "./artifact";

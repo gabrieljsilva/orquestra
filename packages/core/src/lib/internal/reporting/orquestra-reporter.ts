@@ -1,6 +1,10 @@
-import type { FeatureMeta } from "../../types/reporting";
-import type { StepEvent } from "../../types/shard-manager/shard-manager.types";
+import type { OrquestraArtifact } from "../../types/artifact";
+
+export interface ReporterContext {
+	outputDir: string;
+	artifactPath: string;
+}
 
 export abstract class OrquestraReporter {
-	abstract run(events: StepEvent[], meta: FeatureMeta[]): Promise<void> | void;
+	abstract run(artifact: OrquestraArtifact, ctx?: ReporterContext): Promise<void> | void;
 }

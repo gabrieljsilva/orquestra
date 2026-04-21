@@ -1,18 +1,16 @@
-import type { FeatureMeta } from "../../types/reporting";
-import type { StepEvent } from "../../types/shard-manager/shard-manager.types";
+import type { OrquestraArtifact } from "../../types/artifact";
 import { OrquestraConsoleReporter } from "./orquestra-console-reporter";
 
-function makeEvent(overrides: Partial<StepEvent>): StepEvent {
+function makeArtifact(overrides: Partial<OrquestraArtifact> = {}): OrquestraArtifact {
 	return {
-		runId: "run-1",
-		workerPid: 1,
-		feature: "create user",
-		scenario: "it should create a user",
-		stepId: "step-1",
-		stepName: "I have valid data",
-		keyword: "Given",
-		ts: "2026-04-21T12:00:00.000Z",
+		orquestraVersion: "1.0.0",
+		generatedAt: "2026-04-21T00:00:00Z",
 		status: "success",
+		glossary: {},
+		personas: [],
+		domains: [],
+		features: [],
+		summary: { totalFeatures: 0, totalScenarios: 0, passed: 0, failed: 0, pending: 0 },
 		...overrides,
 	};
 }
@@ -34,24 +32,40 @@ describe("OrquestraConsoleReporter", () => {
 		return logSpy.mock.calls.map((args) => args.join(" ")).join("\n");
 	}
 
-	it("retorna sem imprimir quando nao ha eventos", () => {
-		reporter.run([], []);
+	it("nao imprime nada quando nao ha features", () => {
+		reporter.run(makeArtifact());
 		expect(logSpy).not.toHaveBeenCalled();
 	});
 
-	it("renderiza feature com narrativa Gherkin usando meta", () => {
-		const events = [
-			makeEvent({ stepId: "s1", stepName: "I have valid data", keyword: "Given", status: "success" }),
-			makeEvent({ stepId: "s2", stepName: "I send a POST", keyword: "When", status: "success" }),
-			makeEvent({ stepId: "s3", stepName: "should return 200", keyword: "Then", status: "success" }),
-		];
-		const meta: FeatureMeta[] = [
-			{ feature: "create user", as: "unauthenticated visitor", I: "want to register", so: "I can use the app" },
-		];
+	it("renderiza feature com narrativa Gherkin", () => {
+		reporter.run(
+			makeArtifact({
+				features: [
+					{
+						name: "create user",
+						domain: null,
+						context: null,
+						as: "unauthenticated visitor",
+						I: "want to register",
+						so: "I can use the app",
+						status: "success",
+						scenarios: [
+							{
+								name: "it should create a user",
+								status: "success",
+								steps: [
+									{ keyword: "Given", name: "I have valid data", status: "success" },
+									{ keyword: "When", name: "I send a POST", status: "success" },
+									{ keyword: "Then", name: "should return 200", status: "success" },
+								],
+							},
+						],
+					},
+				],
+			}),
+		);
 
-		reporter.run(events, meta);
 		const out = output();
-
 		expect(out).toContain("Feature: create user");
 		expect(out).toContain("As an unauthenticated visitor");
 		expect(out).toContain("I want to register");
@@ -61,89 +75,131 @@ describe("OrquestraConsoleReporter", () => {
 		expect(out).toContain("✓");
 	});
 
-	it("nao imprime bloco As/I/So quando nao ha meta para a feature", () => {
-		const events = [makeEvent({})];
-		reporter.run(events, []);
-		const out = output();
-		expect(out).toContain("Feature: create user");
-		expect(out).not.toContain("As ");
-		expect(out).not.toContain("So that ");
-	});
-
-	it("usa tree chars ├── e └── na lista de steps", () => {
-		const events = [
-			makeEvent({ stepId: "s1", stepName: "a", keyword: "Given", status: "success" }),
-			makeEvent({ stepId: "s2", stepName: "b", keyword: "When", status: "success" }),
-			makeEvent({ stepId: "s3", stepName: "c", keyword: "Then", status: "success" }),
-		];
-		reporter.run(events, []);
-		const out = output();
-		expect(out).toContain("├──");
-		expect(out).toContain("└──");
-		const lastStepLine = out.split("\n").find((l) => l.includes("Then c"));
-		expect(lastStepLine).toContain("└──");
-	});
-
-	it("imprime step falho com simbolo ✗ e mensagem de erro", () => {
-		const events = [
-			makeEvent({
-				stepId: "s1",
-				stepName: "failing step",
-				keyword: "When",
-				status: "failed",
-				error: { message: "boom" },
+	it("imprime domain quando presente", () => {
+		reporter.run(
+			makeArtifact({
+				features: [
+					{
+						name: "create user",
+						domain: "user management",
+						context: null,
+						as: "visitor",
+						I: "want something",
+						so: "I get it",
+						status: "success",
+						scenarios: [],
+					},
+				],
 			}),
-		];
-		reporter.run(events, []);
+		);
+		expect(output()).toContain("Domain: user management");
+	});
+
+	it("imprime step falho com simbolo ✗ e mensagem", () => {
+		reporter.run(
+			makeArtifact({
+				features: [
+					{
+						name: "billing",
+						domain: null,
+						context: null,
+						as: "customer",
+						I: "want checkout",
+						so: "I can pay",
+						status: "failed",
+						scenarios: [
+							{
+								name: "failing scenario",
+								status: "failed",
+								steps: [
+									{
+										keyword: "When",
+										name: "a step throws",
+										status: "failed",
+										error: { message: "boom" },
+									},
+								],
+							},
+						],
+					},
+				],
+			}),
+		);
 		const out = output();
 		expect(out).toContain("✗");
-		expect(out).toContain("When failing step");
+		expect(out).toContain("When a step throws");
 		expect(out).toContain("→ boom");
 	});
 
 	it("imprime step pending com simbolo ○", () => {
-		const events = [makeEvent({ stepId: "s1", stepName: "not yet", status: "pending" })];
-		reporter.run(events, []);
+		reporter.run(
+			makeArtifact({
+				features: [
+					{
+						name: "future",
+						domain: null,
+						context: null,
+						as: "dev",
+						I: "want to specify later",
+						so: "I can plan",
+						status: "pending",
+						scenarios: [
+							{
+								name: "pending scenario",
+								status: "pending",
+								steps: [{ keyword: "Given", name: "not yet", status: "pending" }],
+							},
+						],
+					},
+				],
+			}),
+		);
 		expect(output()).toContain("○");
 	});
 
-	it("usa ? como fallback quando o status e desconhecido", () => {
-		const events = [
-			makeEvent({
-				stepId: "s1",
-				stepName: "weird",
-				status: "skipped" as any,
+	it("nao adiciona artigo quando 'as' ja comeca com an/a/the", () => {
+		reporter.run(
+			makeArtifact({
+				features: [
+					{
+						name: "x",
+						domain: null,
+						context: null,
+						as: "an admin",
+						I: "want y",
+						so: "I get z",
+						status: "success",
+						scenarios: [],
+					},
+				],
 			}),
-		];
-		reporter.run(events, []);
-		expect(output()).toContain("?");
-	});
-
-	it("mantem a ordem de insercao das features independentemente do nome", () => {
-		const events = [
-			makeEvent({ stepId: "s1", feature: "zeta", scenario: "sc1", stepName: "a" }),
-			makeEvent({ stepId: "s2", feature: "alpha", scenario: "sc1", stepName: "b" }),
-		];
-		reporter.run(events, []);
-		const out = output();
-		expect(out.indexOf("Feature: zeta")).toBeLessThan(out.indexOf("Feature: alpha"));
-	});
-
-	it("considera o evento mais recente do mesmo stepId (ex.: pending -> success)", () => {
-		const events = [
-			makeEvent({ stepId: "s1", stepName: "x", status: "pending" }),
-			makeEvent({ stepId: "s1", stepName: "x", status: "success" }),
-		];
-		reporter.run(events, []);
-		const out = output();
-		expect(out).toContain("✓");
-		expect(out).not.toContain("○");
-	});
-
-	it("nao adiciona artigo quando o 'as' ja comeca com an/a/the", () => {
-		const events = [makeEvent({})];
-		const meta: FeatureMeta[] = [{ feature: "create user", as: "an admin", I: "want x", so: "I get y" }];
-		reporter.run(events, meta);
+		);
 		expect(output()).toContain("As an admin");
+	});
+
+	it("mostra duracao do step quando presente", () => {
+		reporter.run(
+			makeArtifact({
+				features: [
+					{
+						name: "x",
+						domain: null,
+						context: null,
+						as: "user",
+						I: "want y",
+						so: "I get z",
+						status: "success",
+						scenarios: [
+							{
+								name: "s",
+								status: "success",
+								steps: [{ keyword: "Given", name: "setup", status: "success", durationMs: 42 }],
+							},
+						],
+					},
+				],
+			}),
+		);
+		expect(output()).toContain("(42ms)");
 	});
 });

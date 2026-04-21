@@ -1,31 +1,25 @@
 import { OrquestraHttpServer } from "../adapters";
 import { logger } from "../constants";
-import { getPackageVersion } from "../helpers/version";
 import { BootstrapManager } from "../internal/bootstrap-manager";
 import { Injectable, IocContainer } from "../internal/ioc-container";
 import { Logger } from "../internal/logger";
 import { BddContainer } from "../internal/orquestra-bdd-container";
 import { OrquestraContext } from "../internal/orquestra-context";
 import { MacroRegistry } from "../internal/orquestra-macro";
-import { OrquestraShardManager } from "../internal/orquestra-shard-manager";
-import { OrquestraReporter } from "../internal/reporting/orquestra-reporter";
-import { assertCompatible } from "../internal/reporting/version-compatibility";
+import type { StepEvent } from "../types/events";
 import { IOrquestraContext, OrquestraBootstrapOptions, OrquestraOptions } from "../types";
 import type { FeatureDefinition } from "../types/bdd";
-
-const DEFAULT_HISTORY_LIMIT = 1;
+import type { FeatureMeta } from "../types/reporting";
 
 export class Orquestra {
 	private readonly bootstrapManager: BootstrapManager;
 	private readonly context: IOrquestraContext;
 	private readonly logger: Logger;
 	private readonly bddContainer: BddContainer;
-	private readonly historyLimit: number;
 	private bootstrapOptions: OrquestraBootstrapOptions;
 
 	constructor(options: OrquestraOptions) {
 		this.logger = options.logger || logger;
-		this.historyLimit = options.historyLimit ?? DEFAULT_HISTORY_LIMIT;
 
 		const container = new IocContainer(this.logger);
 		this.context = new OrquestraContext(container);
@@ -75,32 +69,11 @@ export class Orquestra {
 			this.bootstrapOptions = options;
 		}
 
-		const shards = new OrquestraShardManager();
-		shards.cleanupOldRuns(this.historyLimit);
-		shards.writeManifest({
-			orquestraVersion: getPackageVersion(),
-			createdAt: new Date().toISOString(),
-			runId: shards.getRunId(),
-		});
-
 		await this.bootstrapManager.start(this.bootstrapOptions);
 	}
 
 	async teardown() {
 		await this.bootstrapManager.teardown(this.bootstrapOptions);
-	}
-
-	async report(reporter: OrquestraReporter): Promise<void> {
-		const shards = new OrquestraShardManager();
-		const manifest = shards.readManifest();
-		if (manifest) {
-			assertCompatible(manifest.orquestraVersion, getPackageVersion());
-		} else {
-			console.warn("[Orquestra] Run sem manifest — pulando check de versao.");
-		}
-		const events = shards.readEvents();
-		const meta = shards.readMeta();
-		await reporter.run(events, meta);
 	}
 
 	async provision() {
@@ -109,6 +82,18 @@ export class Orquestra {
 
 	async deprovision() {
 		await this.bootstrapManager.deprovision();
+	}
+
+	getEvents(): StepEvent[] {
+		return this.bddContainer.getEvents();
+	}
+
+	getFeatureMeta(): FeatureMeta[] {
+		return this.bddContainer.getFeatureMeta();
+	}
+
+	getBddContainer(): BddContainer {
+		return this.bddContainer;
 	}
 
 	get http() {

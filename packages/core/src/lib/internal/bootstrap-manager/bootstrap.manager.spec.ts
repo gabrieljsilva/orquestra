@@ -129,7 +129,7 @@ describe("BootstrapManager", () => {
 
 		await manager.start();
 
-		expect(order).toEqual(["helpers", "containers", "http", "plugins", "services", "macros"]);
+		expect(order).toEqual(["containers", "helpers", "http", "plugins", "services", "macros"]);
 	});
 
 	it("should skip container start when skipContainers option is passed", async () => {

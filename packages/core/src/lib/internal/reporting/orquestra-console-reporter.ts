@@ -1,5 +1,5 @@
-import type { FeatureMeta } from "../../types/reporting";
-import type { StepEvent } from "../../types/shard-manager/shard-manager.types";
+import type { ArtifactFeature, ArtifactScenario, ArtifactStep, OrquestraArtifact } from "../../types/artifact";
+import type { StepStatus } from "../../types/events";
 import { OrquestraReporter } from "./orquestra-reporter";
 
 const c = {
@@ -7,119 +7,66 @@ const c = {
 	green: (s: string) => `\x1b[32m${s}\x1b[39m`,
 	red: (s: string) => `\x1b[31m${s}\x1b[39m`,
 	gray: (s: string) => `\x1b[90m${s}\x1b[39m`,
+	dim: (s: string) => `\x1b[2m${s}\x1b[22m`,
 };
 
-const SYMBOL: Record<StepEvent["status"], string> = {
+const SYMBOL: Record<StepStatus, string> = {
 	success: "✓",
 	failed: "✗",
 	pending: "○",
 };
 
-const UNKNOWN_SYMBOL = "?";
-
-interface RenderedStep {
-	stepId: string;
-	name: string;
-	keyword: StepEvent["keyword"];
-	status: StepEvent["status"];
-	error?: StepEvent["error"];
-	order: number;
-}
-
 export class OrquestraConsoleReporter extends OrquestraReporter {
-	run(events: StepEvent[], meta: FeatureMeta[]): void {
-		if (!events.length) return;
+	run(artifact: OrquestraArtifact): void {
+		if (artifact.features.length === 0) return;
 
-		const metaByFeature = new Map(meta.map((m) => [m.feature, m]));
-		const { byFeature, featureOrder } = this.aggregate(events);
-
-		for (const featureName of featureOrder) {
-			const scMap = byFeature.get(featureName);
-			if (!scMap) continue;
-			this.printFeature(featureName, scMap, metaByFeature.get(featureName));
+		for (const feature of artifact.features) {
+			this.printFeature(feature);
 		}
 	}
 
-	private aggregate(events: StepEvent[]): {
-		byFeature: Map<string, Map<string, RenderedStep[]>>;
-		featureOrder: string[];
-	} {
-		const latestByStep = new Map<string, StepEvent>();
-		const orderByStep = new Map<string, number>();
-		let seq = 0;
-
-		for (const evt of events) {
-			latestByStep.set(evt.stepId, evt);
-			if (!orderByStep.has(evt.stepId)) orderByStep.set(evt.stepId, ++seq);
-		}
-
-		const byFeature = new Map<string, Map<string, RenderedStep[]>>();
-		const featureOrder: string[] = [];
-
-		for (const [stepId, evt] of latestByStep) {
-			let featureMap = byFeature.get(evt.feature);
-			if (!featureMap) {
-				featureMap = new Map();
-				byFeature.set(evt.feature, featureMap);
-				featureOrder.push(evt.feature);
-			}
-			const steps = featureMap.get(evt.scenario) ?? [];
-			steps.push({
-				stepId,
-				name: evt.stepName,
-				keyword: evt.keyword,
-				status: evt.status,
-				error: evt.error,
-				order: orderByStep.get(stepId) || 0,
-			});
-			featureMap.set(evt.scenario, steps);
-		}
-
-		return { byFeature, featureOrder };
-	}
-
-	private printFeature(featureName: string, scMap: Map<string, RenderedStep[]>, meta: FeatureMeta | undefined): void {
-		console.log(c.bold(`Feature: ${featureName}`));
-		if (meta) {
-			console.log(`  As ${this.prefixArticle(meta.as)}`);
-			console.log(`  I ${meta.I}`);
-			console.log(`  So that ${meta.so}`);
-		}
+	private printFeature(feature: ArtifactFeature): void {
+		console.log(c.bold(`Feature: ${feature.name}`));
+		if (feature.domain) console.log(c.dim(`  Domain: ${feature.domain}`));
+		console.log(`  As ${this.prefixArticle(feature.as)}`);
+		console.log(`  I ${feature.I}`);
+		console.log(`  So that ${feature.so}`);
 		console.log("");
 
-		const scenarios = Array.from(scMap.entries());
-		for (let i = 0; i < scenarios.length; i++) {
-			const [scenarioName, steps] = scenarios[i];
-			this.printScenario(scenarioName, steps);
-			if (i < scenarios.length - 1) console.log("");
+		for (let i = 0; i < feature.scenarios.length; i++) {
+			this.printScenario(feature.scenarios[i]);
+			if (i < feature.scenarios.length - 1) console.log("");
+		}
+		console.log("");
+	}
+
+	private printScenario(scenario: ArtifactScenario): void {
+		const hasFail = scenario.steps.some((s) => s.status === "failed");
+		const allOk = !hasFail && scenario.steps.every((s) => s.status === "success");
+
+		const label = `  Scenario: ${scenario.name}`;
+		console.log(allOk ? c.green(label) : hasFail ? c.red(label) : label);
+
+		for (let i = 0; i < scenario.steps.length; i++) {
+			this.printStep(scenario.steps[i], i === scenario.steps.length - 1, allOk);
 		}
 	}
 
-	private printScenario(scenarioName: string, steps: RenderedStep[]): void {
-		steps.sort((a, b) => a.order - b.order);
-		const hasFail = steps.some((s) => s.status === "failed");
-		const allOk = !hasFail && steps.every((s) => s.status === "success");
+	private printStep(step: ArtifactStep, isLast: boolean, allOk: boolean): void {
+		const branch = isLast ? "└──" : "├──";
+		const symbol = SYMBOL[step.status] ?? "?";
+		const duration = step.durationMs !== undefined ? c.dim(` (${step.durationMs}ms)`) : "";
+		const line = `    ${branch} ${symbol} ${step.keyword} ${step.name}${duration}`;
 
-		const scenarioLabel = `  Scenario: ${scenarioName}`;
-		console.log(allOk ? c.green(scenarioLabel) : scenarioLabel);
-
-		for (let i = 0; i < steps.length; i++) {
-			const step = steps[i];
-			const isLast = i === steps.length - 1;
-			const branch = isLast ? "└──" : "├──";
-			const symbol = SYMBOL[step.status] ?? UNKNOWN_SYMBOL;
-			const line = `    ${branch} ${symbol} ${step.keyword} ${step.name}`;
-
-			if (step.status === "failed") {
-				console.log(c.red(line));
-				if (step.error?.message) console.log(c.red(`        → ${step.error.message}`));
-			} else if (step.status === "pending") {
-				console.log(c.gray(line));
-			} else if (allOk) {
-				console.log(c.green(line));
-			} else {
-				console.log(c.gray(line));
-			}
+		if (step.status === "failed") {
+			console.log(c.red(line));
+			if (step.error?.message) console.log(c.red(`        → ${step.error.message}`));
+		} else if (step.status === "pending") {
+			console.log(c.gray(line));
+		} else if (allOk) {
+			console.log(c.green(line));
+		} else {
+			console.log(c.gray(line));
 		}
 	}
 

@@ -10,8 +10,7 @@ export class PostgresOrquestraContainer extends OrquestraContainer<StartedPostgr
 			.withWaitStrategy(Wait.forHealthCheck())
 			.start();
 		const env = this.ctx.container.get<EnvHelper>(EnvHelper);
-		const databaseUrl = startedContainer.getConnectionUri();
-		env.override("DATABASE_URL", databaseUrl);
+		env.override("DATABASE_BASE_URL", startedContainer.getConnectionUri());
 
 		return startedContainer;
 	}

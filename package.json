@@ -4,6 +4,7 @@
 	"private": true,
 	"workspaces": [
 		"packages/core",
+		"packages/runner",
 		"packages/adapter-express",
 		"packages/adapter-fastify",
 		"e2e"

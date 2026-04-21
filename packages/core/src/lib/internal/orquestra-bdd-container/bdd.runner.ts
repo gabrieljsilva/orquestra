@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { StepEvent } from "../../types/shard-manager/shard-manager.types";
+import type { StepEvent } from "../../types/events";
 
 const keywordOf = (k: string): "Given" | "When" | "Then" => {
 	if (k === "GIVEN") return "Given";
@@ -12,16 +12,28 @@ export class BddRunner {
 		return createHash("sha1").update(`${feature}\u0001${scenario}\u0001${keyword}\u0001${stepName}`).digest("hex");
 	}
 
-	static nowIso(): string {
-		return new Date().toISOString();
-	}
-
 	static async runScenario(scenario: any, initialCtx: object = {}): Promise<any> {
 		let ctx: any = { ...(initialCtx as object) };
 		const feature = scenario.feature as any;
+
 		for (const step of (scenario as any).steps as Array<any>) {
-			const stepId = BddRunner.computeStepId(feature.getName(), scenario.name, keywordOf(step.kind), step.name);
-			const tStart = BddRunner.nowIso();
+			const keyword = keywordOf(step.kind);
+			const stepId = BddRunner.computeStepId(feature.getName(), scenario.name, keyword, step.name);
+
+			if (!step.fn) {
+				const evt: StepEvent = {
+					feature: feature.getName(),
+					scenario: scenario.name,
+					stepId,
+					stepName: step.name,
+					keyword,
+					status: "pending",
+				};
+				feature.pushEvent(evt);
+				continue;
+			}
+
+			const startTime = performance.now();
 			try {
 				const delta = await step.run(ctx);
 				if (delta && typeof delta === "object") {
@@ -29,64 +41,33 @@ export class BddRunner {
 				} else {
 					ctx = { ...ctx, result: delta };
 				}
-				const evtOk: StepEvent = {
-					runId: feature.getRunId(),
-					workerPid: process.pid,
+				const durationMs = Math.round(performance.now() - startTime);
+				const evt: StepEvent = {
 					feature: feature.getName(),
 					scenario: scenario.name,
 					stepId,
 					stepName: step.name,
-					keyword: keywordOf(step.kind),
-					ts: BddRunner.nowIso(),
-					tCollect: feature.getCollectTs(stepId),
-					tStart,
-					tEnd: BddRunner.nowIso(),
+					keyword,
 					status: "success",
+					durationMs,
 				};
-				feature.writeEvent(evtOk);
+				feature.pushEvent(evt);
 			} catch (err: any) {
-				const evtFail: StepEvent = {
-					runId: feature.getRunId(),
-					workerPid: process.pid,
+				const durationMs = Math.round(performance.now() - startTime);
+				const evt: StepEvent = {
 					feature: feature.getName(),
 					scenario: scenario.name,
 					stepId,
 					stepName: step.name,
-					keyword: keywordOf(step.kind),
-					ts: BddRunner.nowIso(),
-					tCollect: feature.getCollectTs(stepId),
-					tStart,
-					tEnd: BddRunner.nowIso(),
+					keyword,
 					status: "failed",
+					durationMs,
 					error: { message: String(err?.message ?? err), stack: err?.stack },
 				};
-				feature.writeEvent(evtFail);
+				feature.pushEvent(evt);
 				throw err;
 			}
 		}
 		return ctx;
-	}
-
-	static async collect(feature: any): Promise<void> {
-		for (const scenario of (feature as any).scenarios as Array<any>) {
-			for (const step of (scenario as any).steps as Array<any>) {
-				const stepId = BddRunner.computeStepId(feature.getName(), scenario.name, keywordOf(step.kind), step.name);
-				const tCollect = BddRunner.nowIso();
-				(feature as any).collectTimestamps.set(stepId, tCollect);
-				const evt: StepEvent = {
-					runId: feature.getRunId(),
-					workerPid: process.pid,
-					feature: feature.getName(),
-					scenario: scenario.name,
-					stepId,
-					stepName: step.name,
-					keyword: keywordOf(step.kind),
-					ts: tCollect,
-					tCollect,
-					status: "pending",
-				};
-				feature.writeEvent(evt);
-			}
-		}
 	}
 }

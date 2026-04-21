@@ -16,14 +16,14 @@ export class TestRabbitmqService extends OrquestraService {
 
 		await channel.assertExchange(exchange, "topic", { durable: true });
 
-		console.info("[ORQUESTRA]: Publishing message to RabbitMQ queue");
+		this.logger.info("Publishing message to RabbitMQ queue");
 		channel.publish(exchange, queue, Buffer.from(JSON.stringify(message)));
 	}
 
 	async createRabbitMQConnection() {
 		let retryCount = 0;
 		return retryUntil(async () => {
-			console.info(`[ORQUESTRA]: Creating RabbitMQ connection: ${retryCount++}/5`);
+			this.logger.info(`Creating RabbitMQ connection: ${retryCount++}/5`);
 			const connectionUrl = process.env.RABBITMQ_URL;
 
 			if (!connectionUrl) {
@@ -34,7 +34,7 @@ export class TestRabbitmqService extends OrquestraService {
 
 			const ch = await conn.createChannel();
 
-			console.info("[ORQUESTRA]: RabbitMQ connection created");
+			this.logger.info("RabbitMQ connection created");
 
 			return {
 				channel: ch,

@@ -41,7 +41,6 @@ export interface OrquestraOptions {
 	macros?: Array<MacroProvider>;
 	env?: LoadEnvOptions;
 	logger?: Logger;
-	historyLimit?: number;
 }
 
 export interface OrquestraBootstrapOptions {
