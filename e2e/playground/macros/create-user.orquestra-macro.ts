@@ -8,7 +8,7 @@ export interface CreateUserMacroContext {
 }
 
 export class CreateUserOrquestraMacro extends OrquestraMacro<CreateUserMacroContext> {
-	title = "there is a user registered in database";
+	override title = "there is a user registered in database";
 
 	async execute(): Promise<CreateUserMacroContext> {
 		const factory = new Factory(fakerPT_BR);
