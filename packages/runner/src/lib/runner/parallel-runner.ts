@@ -20,6 +20,7 @@ export interface ParallelRunnerOptions {
 	featureFiles: string[];
 	concurrency: number;
 	stopOnFail: boolean;
+	tsconfigPath?: string;
 }
 
 export interface ParallelRunnerResult {
@@ -48,6 +49,7 @@ export class ParallelRunner {
 				featureFiles: this.options.featureFiles,
 				concurrency: this.options.concurrency,
 				stopOnFail: this.options.stopOnFail,
+				tsconfigPath: this.options.tsconfigPath,
 			});
 			workerResult = await manager.run();
 		} finally {
@@ -81,11 +83,7 @@ export class ParallelRunner {
 		};
 	}
 
-	private markPendingFeatures(
-		artifact: OrquestraArtifact,
-		_pendingFiles: string[],
-		_failedFiles: string[],
-	): void {
+	private markPendingFeatures(artifact: OrquestraArtifact, _pendingFiles: string[], _failedFiles: string[]): void {
 		for (const feature of artifact.features) {
 			if (feature.scenarios.length === 0) {
 				feature.status = "pending";

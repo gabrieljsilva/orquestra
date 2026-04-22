@@ -22,6 +22,7 @@ works out of the box after install.
 ```bash
 npx orquestra test                         # run features from orquestra.config.ts
 npx orquestra test --config ./custom.ts    # custom config path
+npx orquestra test --tsconfig ./tsconfig.test.json  # custom tsconfig for transpilation
 npx orquestra test --concurrency 4         # N parallel workers
 npx orquestra test --stopOnFail            # kill all workers on first crash
 npx orquestra test user-registration       # filter features by name substring
@@ -38,8 +39,8 @@ Exit codes:
 
 ## `orquestra.config.ts`
 
-The config is a TypeScript file loaded at runtime via `jiti`. Use
-`defineConfig` from `@orquestra/core` for type hints.
+The config is a TypeScript file loaded at runtime. Use `defineConfig` from
+`@orquestra/core` for type hints.
 
 ### Minimal config (single-process, no containers)
 
@@ -212,6 +213,11 @@ feature
   shared memory — events cross via IPC.
 - **Events in memory:** the main process aggregates step events from all
   workers into a single artifact. No filesystem per-step writes.
+- **Log prefixes:** logs emitted from inside a worker are suffixed with
+  `:W<id>` so you can tell them apart. Main-process logs stay as
+  `[Orquestra]`, worker 0 becomes `[Orquestra:W0]`, worker 1
+  `[Orquestra:W1]`, and the same suffix applies to user-defined helpers
+  (e.g. `[TestDatabaseService:W0]`).
 
 ```
 npx orquestra test --concurrency 4
@@ -442,7 +448,59 @@ sync with the specs.
 
 ---
 
+## Decorators & TypeScript config
+
+The runner transpiles your TypeScript files at runtime using **SWC**, which
+automatically respects your project's `tsconfig.json`. No extra configuration
+needed — the same settings you use for `tsc`/IDE work for tests.
+
+### What's auto-detected
+
+| `tsconfig.json` option | Effect on tests |
+|---|---|
+| `compilerOptions.experimentalDecorators: true` | Legacy decorators (Nest, TypeORM, class-validator) |
+| `compilerOptions.experimentalDecorators: false`/absent | TC39 stage-3 decorators (version `2022-03`) |
+| `compilerOptions.emitDecoratorMetadata: true` | Emits `Reflect.metadata(...)` (Nest DI, class-validator requires this) |
+| `compilerOptions.target` | Target JS version (default `es2022`) |
+| `compilerOptions.baseUrl` + `paths` | Path aliases resolved by SWC (you can drop `tsconfig-paths/register`) |
+| `extends` | Resolved recursively via the TypeScript API |
+
+### Discovery
+
+The runner searches upward from the `orquestra.config.ts` directory for a
+`tsconfig.json`. Override with `--tsconfig <path>`:
+
+```bash
+npx orquestra test --tsconfig ./tsconfig.test.json
+```
+
+If no `tsconfig.json` is found, SWC defaults apply (TC39 decorators, `target:
+es2022`, no metadata emission).
+
+### Troubleshooting
+
+**"Decorating class property failed. Please ensure that transform-class-properties is enabled and runs after the decorators transform."**
+
+This error comes from older versions of Orquestra or from projects where the
+runner could not find a `tsconfig.json`. Ensure:
+
+1. Your `tsconfig.json` is discoverable (same directory as
+   `orquestra.config.ts` or any ancestor), OR pass `--tsconfig <path>`.
+2. It has `"experimentalDecorators": true` when using Nest/TypeORM/class-validator.
+3. It has `"emitDecoratorMetadata": true` if your code relies on runtime
+   metadata (Nest DI, `class-transformer`'s `@Type(() => Foo)`, etc.).
+
+**Known limitations**
+
+- Output module format is always CommonJS (required by the underlying module
+  loader). Feature files written as pure ESM with top-level `import.meta.url`
+  tricks may need adaptation.
+- `import.meta.env` / `import.meta.paths` / `import.meta.resolve` that jiti
+  used to provide are not available under the SWC transformer.
+
+---
+
 ## Requirements
 
 - Node.js >= 22 (uses `node:test`, `node:fs.globSync`, `import.meta.dirname`)
-- TypeScript 5.0+ for best DX
+- TypeScript 5.0+ for best DX (used internally to resolve `tsconfig.json`)

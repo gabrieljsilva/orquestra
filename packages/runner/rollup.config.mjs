@@ -8,11 +8,13 @@ const shebang = "#!/usr/bin/env node\n";
 const shared = {
 	external: [
 		"@orquestra/core",
+		"@swc/core",
 		"citty",
 		"jiti",
 		"typescript",
 		"node:path",
 		"node:fs",
+		"node:module",
 		"node:url",
 		"node:test",
 		"node:child_process",

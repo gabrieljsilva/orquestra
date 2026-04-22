@@ -16,14 +16,20 @@ export const typesCommand = defineCommand({
 			description: "Path to orquestra.config.ts",
 			alias: "c",
 		},
+		tsconfig: {
+			type: "string",
+			description:
+				"Path to tsconfig.json used for transpilation (absolute or relative to the config directory). Overrides auto-discovery.",
+		},
 	},
 	async run({ args }) {
-		const { config, configDir } = await loadConfig(args.config);
-		const spec = await loadSpec(config.spec, configDir);
+		const tsconfigPath = args.tsconfig;
+		const { config, configDir } = await loadConfig(args.config, { tsconfigPath });
+		const spec = await loadSpec(config.spec, configDir, { tsconfigPath });
 		const outputDir = resolveOutputDir(config, configDir);
 		mkdirSync(outputDir, { recursive: true });
 
-		const outputPath = await generateTypes({ config, configDir, spec, outputDir });
+		const outputPath = await generateTypes({ config, configDir, spec, outputDir, tsconfigPath });
 
 		console.log(`[orquestra] types generated: ${outputPath}`);
 	},

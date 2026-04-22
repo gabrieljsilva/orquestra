@@ -68,7 +68,7 @@ truth for tests, docs, and AI tooling.
 | Package | What it does |
 |---|---|
 | [`@orquestra/core`](./packages/core/README.md) | BDD engine, IoC container, lifecycle, reporters |
-| [`@orquestra/runner`](./packages/runner/README.md) | CLI, config loader, feature discovery, parallelism via IPC, type generation |
+| [`@orquestra/runner`](https://www.npmjs.com/package/@orquestra/runner) | CLI, config loader, feature discovery, parallelism via IPC, type generation |
 | [`@orquestra/adapter-express`](./packages/adapter-express/README.md) | HTTP adapter for Express |
 | [`@orquestra/adapter-fastify`](./packages/adapter-fastify/README.md) | HTTP adapter for Fastify |
 

@@ -18,6 +18,11 @@ export const testCommand = defineCommand({
 			description: "Path to orquestra.config.ts",
 			alias: "c",
 		},
+		tsconfig: {
+			type: "string",
+			description:
+				"Path to tsconfig.json used for transpilation (absolute or relative to the config directory). Overrides auto-discovery.",
+		},
 		concurrency: {
 			type: "string",
 			description: "Number of parallel workers",
@@ -34,8 +39,9 @@ export const testCommand = defineCommand({
 		},
 	},
 	async run({ args }) {
-		const { config, configDir } = await loadConfig(args.config);
-		const spec = await loadSpec(config.spec, configDir);
+		const tsconfigPath = args.tsconfig;
+		const { config, configDir } = await loadConfig(args.config, { tsconfigPath });
+		const spec = await loadSpec(config.spec, configDir, { tsconfigPath });
 		const featureFiles = discoverFeatureFiles({
 			testMatch: config.testMatch,
 			configDir,
@@ -47,13 +53,13 @@ export const testCommand = defineCommand({
 			return;
 		}
 
-		const concurrency = args.concurrency ? Number.parseInt(args.concurrency, 10) : (config.concurrency ?? 1);
+		const concurrency = args.concurrency ? Number.parseInt(args.concurrency, 10) : config.concurrency ?? 1;
 		const stopOnFail = args.stopOnFail;
 
 		console.log(`[orquestra] running ${featureFiles.length} feature file(s) with concurrency=${concurrency}\n`);
 
 		if (concurrency <= 1) {
-			const runner = new Runner({ config, spec, featureFiles, configDir });
+			const runner = new Runner({ config, spec, featureFiles, configDir, tsconfigPath });
 			const { artifact, artifactPath } = await runner.run();
 			printSummary(artifact, artifactPath);
 			if (artifact.summary.failed > 0) process.exitCode = 1;
@@ -70,6 +76,7 @@ export const testCommand = defineCommand({
 			featureFiles,
 			concurrency,
 			stopOnFail,
+			tsconfigPath,
 		});
 
 		const { artifact, artifactPath, crashed } = await parallel.run();
@@ -85,8 +92,12 @@ function printSummary(artifact: { summary: { passed: number; failed: number; pen
 
 	const parts: string[] = [];
 	parts.push(green(`${artifact.summary.passed} passed`));
-	parts.push(artifact.summary.failed > 0 ? red(`${artifact.summary.failed} failed`) : `${artifact.summary.failed} failed`);
-	parts.push(artifact.summary.pending > 0 ? gray(`${artifact.summary.pending} pending`) : `${artifact.summary.pending} pending`);
+	parts.push(
+		artifact.summary.failed > 0 ? red(`${artifact.summary.failed} failed`) : `${artifact.summary.failed} failed`,
+	);
+	parts.push(
+		artifact.summary.pending > 0 ? gray(`${artifact.summary.pending} pending`) : `${artifact.summary.pending} pending`,
+	);
 
 	console.log(`\n[orquestra] done: ${parts.join(", ")}`);
 	console.log(`[orquestra] artifact: ${path}`);

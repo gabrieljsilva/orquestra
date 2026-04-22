@@ -1,25 +1,32 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { OrquestraConfig } from "@orquestra/core";
-import { createJiti } from "jiti";
+import { createOrquestraJiti } from "../transform";
 
 const DEFAULT_CONFIG_FILE = "orquestra.config.ts";
-
-const jiti = createJiti(import.meta.url, {
-	interopDefault: true,
-});
 
 export interface LoadedConfig {
 	config: OrquestraConfig;
 	configDir: string;
 }
 
-export async function loadConfig(configPath?: string): Promise<LoadedConfig> {
+export interface LoadConfigOptions {
+	tsconfigPath?: string;
+}
+
+export async function loadConfig(configPath?: string, options: LoadConfigOptions = {}): Promise<LoadedConfig> {
 	const filePath = resolve(process.cwd(), configPath ?? DEFAULT_CONFIG_FILE);
 
 	if (!existsSync(filePath)) {
 		throw new Error(`Config file not found: ${filePath}`);
 	}
+
+	const configDir = dirname(filePath);
+	const jiti = createOrquestraJiti({
+		id: import.meta.url,
+		cwd: configDir,
+		tsconfigPath: options.tsconfigPath,
+	});
 
 	const imported = await jiti.import(filePath);
 	const config = (imported as any).default ?? imported;
@@ -28,7 +35,7 @@ export async function loadConfig(configPath?: string): Promise<LoadedConfig> {
 
 	return {
 		config: config as OrquestraConfig,
-		configDir: dirname(filePath),
+		configDir,
 	};
 }
 

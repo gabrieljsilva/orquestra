@@ -41,7 +41,13 @@ export class Logger {
 
 	private formatArgs(level: LoggerLevel, args: any[]): any[] {
 		const color = COLORS[level] || RESET;
-		return [`${color}[${this.prefix || "Orquestra"}] -${RESET}`, ...args];
+		// Only attach the worker suffix on forked child processes (identified by
+		// `process.send` — set by Node on `child_process.fork`). In single-process
+		// mode the main process has ORQUESTRA_WORKER_ID="0" set too, but we don't
+		// want the suffix there since there's nothing to disambiguate.
+		const workerId = process.send ? process.env.ORQUESTRA_WORKER_ID : undefined;
+		const workerSuffix = workerId !== undefined ? `:W${workerId}` : "";
+		return [`${color}[${this.prefix || "Orquestra"}${workerSuffix}] -${RESET}`, ...args];
 	}
 
 	log(...args: any[]) {

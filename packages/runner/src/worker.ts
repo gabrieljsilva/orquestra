@@ -1,12 +1,11 @@
 import { test } from "node:test";
 import type { Feature, Orquestra } from "@orquestra/core";
 import { initOrquestra, resetOrquestraInstance } from "@orquestra/core";
-import { createJiti } from "jiti";
 import { loadConfig } from "./lib/loaders/config.loader";
 import { configToWorkerOptions } from "./lib/runner/config-mapper";
 import type { MainToWorkerMessage, WorkerToMainMessage } from "./lib/runner/ipc-protocol";
-
-const jiti = createJiti(import.meta.url, { interopDefault: true });
+import { installNodeTestReporterFilter } from "./lib/runner/silence-node-test";
+import { createOrquestraJiti } from "./lib/transform";
 
 function send(msg: WorkerToMainMessage): void {
 	if (process.send) process.send(msg);
@@ -15,6 +14,7 @@ function send(msg: WorkerToMainMessage): void {
 async function main() {
 	const configPath = process.argv[2];
 	const workerId = process.argv[3];
+	const tsconfigPath = process.argv[4] || undefined;
 
 	if (!configPath || workerId === undefined) {
 		console.error("[worker] missing args: configPath and workerId required");
@@ -23,18 +23,33 @@ async function main() {
 
 	process.env.ORQUESTRA_WORKER_ID = workerId;
 
-	const { config } = await loadConfig(configPath);
+	const { config, configDir } = await loadConfig(configPath, { tsconfigPath });
+
+	const jiti = createOrquestraJiti({
+		id: import.meta.url,
+		cwd: configDir,
+		tsconfigPath,
+	});
+
 	resetOrquestraInstance();
 	const orq = initOrquestra({ ...configToWorkerOptions(config) });
 
 	await orq.start({ skipContainers: true });
+
+	// Only silence node:test reporter after bootstrap so boot errors surface.
+	installNodeTestReporterFilter();
 
 	const processedFeatureNames = new Set<string>();
 	const emittedMetaNames = new Set<string>();
 
 	const processFeature = async (file: string) => {
 		try {
-			const before = new Set(orq.getBddContainer().getFeatures().map((f) => f.getName()));
+			const before = new Set(
+				orq
+					.getBddContainer()
+					.getFeatures()
+					.map((f) => f.getName()),
+			);
 			await jiti.import(file);
 			const features = orq.getBddContainer().getFeatures();
 			const newFeatures = features.filter((f) => !before.has(f.getName()));
@@ -82,7 +97,7 @@ async function main() {
 	send({ type: "ready" });
 }
 
-async function executeFeature(orq: Orquestra, feature: Feature): Promise<void> {
+async function executeFeature(_orq: Orquestra, feature: Feature): Promise<void> {
 	const knownEventCounts = new Map<string, number>();
 
 	for (const scenario of feature.getScenarios()) {

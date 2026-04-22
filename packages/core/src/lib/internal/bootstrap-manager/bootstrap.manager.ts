@@ -267,9 +267,9 @@ export class BootstrapManager {
 				this.context,
 				token,
 			);
-			this.logger.debug(`Starting container: ${container.containerName}`);
+			this.logger.info(`Starting container: ${container.containerName}`);
 			await container.start();
-			this.logger.debug(`Container started: ${container.containerName}`);
+			this.logger.info(`Container started: ${container.containerName}`);
 
 			started.add(token);
 			starting.delete(token);
@@ -444,9 +444,9 @@ export class BootstrapManager {
 									this.context,
 									token,
 								);
-								this.logger.debug(`Stopping container: ${container.containerName}`);
+								this.logger.info(`Stopping container: ${container.containerName}`);
 								await container.stop();
-								this.logger.debug(`Container stopped: ${container.containerName}`);
+								this.logger.info(`Container stopped: ${container.containerName}`);
 								stoppedContainers.add(token);
 							} catch (error) {
 								this.logger.error(`Error stopping container: ${error}`);
@@ -465,9 +465,9 @@ export class BootstrapManager {
 							this.context,
 							token,
 						);
-						this.logger.debug(`Stopping container: ${container.containerName}`);
+						this.logger.info(`Stopping container: ${container.containerName}`);
 						await container.stop();
-						this.logger.debug(`Container stopped: ${container.containerName}`);
+						this.logger.info(`Container stopped: ${container.containerName}`);
 						stoppedContainers.add(token);
 					} catch (error) {
 						this.logger.error(`Error stopping container: ${error}`);

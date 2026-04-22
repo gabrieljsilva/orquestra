@@ -21,10 +21,12 @@
 	},
 	"scripts": {
 		"prebuild": "rimraf -g dist",
-		"build": "rollup -c"
+		"build": "rollup -c",
+		"postbuild": "chmod +x dist/cli.cjs.js"
 	},
 	"dependencies": {
 		"@orquestra/core": "^2.0.0",
+		"@swc/core": "^1.15.30",
 		"citty": "^0.1.6",
 		"jiti": "^2.6.1"
 	},

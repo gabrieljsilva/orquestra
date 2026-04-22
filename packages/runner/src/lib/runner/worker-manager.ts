@@ -8,6 +8,7 @@ export interface WorkerManagerOptions {
 	featureFiles: string[];
 	concurrency: number;
 	stopOnFail: boolean;
+	tsconfigPath?: string;
 }
 
 export interface WorkerManagerResult {
@@ -64,7 +65,10 @@ export class WorkerManager {
 	}
 
 	private spawnWorker(id: number, workerScript: string): void {
-		const child = fork(workerScript, [this.options.configPath, String(id)], {
+		const args = [this.options.configPath, String(id)];
+		if (this.options.tsconfigPath) args.push(this.options.tsconfigPath);
+
+		const child = fork(workerScript, args, {
 			stdio: ["ignore", "inherit", "inherit", "ipc"],
 			env: { ...process.env, ORQUESTRA_WORKER_ID: String(id) },
 			execArgv: ["--no-deprecation"],

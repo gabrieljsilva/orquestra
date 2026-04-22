@@ -7,21 +7,19 @@ import {
 	initOrquestra,
 	resetOrquestraInstance,
 } from "@orquestra/core";
-import { createJiti } from "jiti";
 import { generateArtifact, getRunnerVersion, writeArtifact } from "../artifact";
+import { type Jiti, createOrquestraJiti } from "../transform";
 import { configToOrquestraOptions } from "./config-mapper";
 import { resolveOutputDir } from "./output-dir";
 import { resolveReporters, runReporters } from "./reporters";
-
-const jiti = createJiti(import.meta.url, {
-	interopDefault: true,
-});
+import { installNodeTestReporterFilter, uninstallNodeTestReporterFilter } from "./silence-node-test";
 
 export interface RunnerOptions {
 	config: OrquestraConfig;
 	spec: OrquestraSpec | null;
 	featureFiles: string[];
 	configDir: string;
+	tsconfigPath?: string;
 }
 
 export interface RunnerResult {
@@ -35,12 +33,18 @@ export class Runner {
 	private readonly spec: OrquestraSpec | null;
 	private readonly featureFiles: string[];
 	private readonly configDir: string;
+	private readonly jiti: Jiti;
 
 	constructor(options: RunnerOptions) {
 		this.config = options.config;
 		this.spec = options.spec;
 		this.featureFiles = options.featureFiles;
 		this.configDir = options.configDir;
+		this.jiti = createOrquestraJiti({
+			id: import.meta.url,
+			cwd: options.configDir,
+			tsconfigPath: options.tsconfigPath,
+		});
 	}
 
 	async run(): Promise<RunnerResult> {
@@ -54,10 +58,15 @@ export class Runner {
 
 		await orq.start();
 
+		// Filter node:test reporter noise only after bootstrap so boot errors
+		// emitted via stdout are not swallowed.
+		installNodeTestReporterFilter();
+
 		try {
 			await this.importFeatureFiles();
 			await this.executeScenarios(orq);
 		} finally {
+			uninstallNodeTestReporterFilter();
 			await orq.teardown();
 		}
 
@@ -81,7 +90,7 @@ export class Runner {
 
 	private async importFeatureFiles(): Promise<void> {
 		for (const file of this.featureFiles) {
-			await jiti.import(file);
+			await this.jiti.import(file);
 		}
 	}
 

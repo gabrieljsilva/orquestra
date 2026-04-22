@@ -4,7 +4,7 @@ The engine of the Orquestra platform: BDD primitives, IoC container, lifecycle
 management, and reporter API.
 
 If you're looking for the CLI runner and config file, see
-[`@orquestra/runner`](../runner/README.md).
+[`@orquestra/runner`](https://www.npmjs.com/package/@orquestra/runner).
 
 ---
 
@@ -93,6 +93,9 @@ writes specs; the dev implements later.
 All components (services, plugins, helpers, containers, macros) extend
 `Injectable` and receive `ctx` in the constructor. A scoped `this.logger`
 (prefixed with the class name, NestJS-style) is available automatically.
+In parallel runs, logs emitted from a forked worker are suffixed with
+`:W<id>` so main-process and worker output can be told apart (e.g.
+`[UserService:W0]`).
 
 ```typescript
 import { OrquestraService } from "@orquestra/core";
@@ -256,7 +259,7 @@ Under the CLI runner, the lifecycle is split:
 - `provision()` on the main process: containers only
 - `start({ skipContainers: true })` on each worker: everything else
 
-See [`@orquestra/runner`](../runner/README.md) for details.
+See [`@orquestra/runner`](https://www.npmjs.com/package/@orquestra/runner) for details.
 
 ---
 
@@ -319,7 +322,7 @@ orquestra.feature("x", {
 ```
 
 The generator is part of `@orquestra/runner`. See
-[`@orquestra/runner` docs](../runner/README.md) for details.
+[`@orquestra/runner` docs](https://www.npmjs.com/package/@orquestra/runner) for details.
 
 ---
 

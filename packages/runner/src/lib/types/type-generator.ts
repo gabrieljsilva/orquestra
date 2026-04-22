@@ -7,18 +7,17 @@ import {
 	initOrquestra,
 	resetOrquestraInstance,
 } from "@orquestra/core";
-import { createJiti } from "jiti";
 import { discoverFeatureFiles } from "../loaders/discovery";
 import { configToWorkerOptions } from "../runner/config-mapper";
-import { extractMacros, type ExtractedMacro } from "./macro-extractor";
-
-const jiti = createJiti(import.meta.url, { interopDefault: true });
+import { createOrquestraJiti } from "../transform";
+import { type ExtractedMacro, extractMacros } from "./macro-extractor";
 
 export interface GenerateTypesOptions {
 	config: OrquestraConfig;
 	configDir: string;
 	spec: OrquestraSpec | null;
 	outputDir: string;
+	tsconfigPath?: string;
 }
 
 export async function generateTypes(options: GenerateTypesOptions): Promise<string> {
@@ -27,7 +26,10 @@ export async function generateTypes(options: GenerateTypesOptions): Promise<stri
 		configDir: options.configDir,
 	});
 
-	const meta = await collectFeatureMeta(options.config, featureFiles);
+	const meta = await collectFeatureMeta(options.config, featureFiles, {
+		cwd: options.configDir,
+		tsconfigPath: options.tsconfigPath,
+	});
 	const personas = uniqSorted(meta.map((m) => m.as));
 	const domains = uniqSorted([
 		...(options.spec?.domains ?? []).map((d) => d.name),
@@ -43,7 +45,22 @@ export async function generateTypes(options: GenerateTypesOptions): Promise<stri
 	return outputPath;
 }
 
-async function collectFeatureMeta(config: OrquestraConfig, featureFiles: string[]): Promise<FeatureMeta[]> {
+interface CollectFeatureMetaContext {
+	cwd: string;
+	tsconfigPath?: string;
+}
+
+async function collectFeatureMeta(
+	config: OrquestraConfig,
+	featureFiles: string[],
+	ctx: CollectFeatureMetaContext,
+): Promise<FeatureMeta[]> {
+	const jiti = createOrquestraJiti({
+		id: import.meta.url,
+		cwd: ctx.cwd,
+		tsconfigPath: ctx.tsconfigPath,
+	});
+
 	resetOrquestraInstance();
 	const orq = initOrquestra(configToWorkerOptions(config));
 	for (const file of featureFiles) {
