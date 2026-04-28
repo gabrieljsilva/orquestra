@@ -18,23 +18,7 @@ describe("IocContainer", () => {
 
 		container = new IocContainer(mockLogger);
 
-		mockContext = {
-			container: container,
-			plugins: [],
-			helpers: [],
-			containers: [],
-			services: [],
-			registerHttpServer: vi.fn(),
-			registerPlugins: vi.fn(),
-			registerHelpers: vi.fn(),
-			registerContainers: vi.fn(),
-			registerServices: vi.fn(),
-			getHttpServer: vi.fn(),
-			getPluginProviders: vi.fn(),
-			getHelperProviders: vi.fn(),
-			getContainerProviders: vi.fn(),
-			getServiceProviders: vi.fn(),
-		};
+		mockContext = { container };
 	});
 
 	it("should register a class provider", () => {
@@ -257,5 +241,67 @@ describe("IocContainer", () => {
 		await expect(container.resolve(mockContext, token)).rejects.toThrow("Unknown provider type");
 
 		expect(mockLogger.error).toHaveBeenCalledWith(`Unknown provider type for: ${token}`);
+	});
+
+	it("concurrent resolve calls share the same in-flight Promise (no double factory)", async () => {
+		let factoryCalls = 0;
+		const token = "SLOW_FACTORY";
+		container.register({
+			provide: token,
+			useFactory: async () => {
+				factoryCalls += 1;
+				await new Promise((r) => setTimeout(r, 20));
+				return { id: factoryCalls };
+			},
+		});
+
+		const [a, b, c] = await Promise.all([
+			container.resolve<{ id: number }>(mockContext, token),
+			container.resolve<{ id: number }>(mockContext, token),
+			container.resolve<{ id: number }>(mockContext, token),
+		]);
+
+		expect(factoryCalls).toBe(1);
+		expect(a).toBe(b);
+		expect(b).toBe(c);
+	});
+
+	it("after resolution the in-flight map is cleared so failures don't poison the cache", async () => {
+		let attempts = 0;
+		const token = "FLAKY_FACTORY";
+		container.register({
+			provide: token,
+			useFactory: async () => {
+				attempts += 1;
+				if (attempts === 1) throw new Error("first attempt fails");
+				return { ok: true };
+			},
+		});
+
+		await expect(container.resolve(mockContext, token)).rejects.toThrow("first attempt fails");
+		const second = await container.resolve<{ ok: boolean }>(mockContext, token);
+
+		expect(attempts).toBe(2);
+		expect(second).toEqual({ ok: true });
+	});
+
+	it("get() logs a warning when provider is registered but instance not yet resolved", () => {
+		class LazyService extends Injectable {}
+		container.register({
+			provide: LazyService,
+			useFactory: async (ctx) => new LazyService(ctx),
+		});
+
+		const result = container.get(LazyService);
+
+		expect(result).toBeUndefined();
+		expect(mockLogger.warn).toHaveBeenCalledWith(
+			expect.stringContaining("returned undefined — provider is registered but not yet instantiated"),
+		);
+	});
+
+	it("get() does not warn for tokens that were never registered", () => {
+		container.get("NEVER_REGISTERED");
+		expect(mockLogger.warn).not.toHaveBeenCalled();
 	});
 });

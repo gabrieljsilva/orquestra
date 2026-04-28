@@ -1,9 +1,9 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import ts from "typescript";
 
 export interface ExtractedMacro {
-	className: string;
+	identifier: string;
 	title: string;
 	filePath: string;
 }
@@ -17,27 +17,7 @@ export function extractMacros(rootDir: string): ExtractedMacro[] {
 		const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.ES2022, true);
 
 		ts.forEachChild(sourceFile, function visit(node) {
-			if (ts.isClassDeclaration(node) && node.name && node.heritageClauses) {
-				const extendsOrquestraMacro = node.heritageClauses.some(
-					(hc) =>
-						hc.token === ts.SyntaxKind.ExtendsKeyword &&
-						hc.types.some((t) => {
-							const expr = t.expression;
-							return ts.isIdentifier(expr) && expr.text === "OrquestraMacro";
-						}),
-				);
-
-				if (extendsOrquestraMacro) {
-					const title = extractTitle(node);
-					if (title) {
-						macros.push({
-							className: node.name.text,
-							title,
-							filePath: file,
-						});
-					}
-				}
-			}
+			collectFromNode(node, file, macros);
 			ts.forEachChild(node, visit);
 		});
 	}
@@ -45,13 +25,36 @@ export function extractMacros(rootDir: string): ExtractedMacro[] {
 	return macros;
 }
 
-function extractTitle(node: ts.ClassDeclaration): string | null {
-	for (const member of node.members) {
-		if (!ts.isPropertyDeclaration(member)) continue;
-		if (!member.name || !ts.isIdentifier(member.name) || member.name.text !== "title") continue;
-		if (!member.initializer) continue;
-		if (ts.isStringLiteral(member.initializer) || ts.isNoSubstitutionTemplateLiteral(member.initializer)) {
-			return member.initializer.text;
+function collectFromNode(node: ts.Node, file: string, macros: ExtractedMacro[]): void {
+	if (!ts.isVariableStatement(node)) return;
+
+	const isExported = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false;
+	if (!isExported) return;
+
+	for (const decl of node.declarationList.declarations) {
+		if (!ts.isIdentifier(decl.name)) continue;
+		if (!decl.initializer || !ts.isCallExpression(decl.initializer)) continue;
+
+		const callee = decl.initializer.expression;
+		if (!ts.isIdentifier(callee) || callee.text !== "defineMacro") continue;
+
+		const arg = decl.initializer.arguments[0];
+		if (!arg || !ts.isObjectLiteralExpression(arg)) continue;
+
+		const title = extractTitleFromObject(arg);
+		if (!title) continue;
+
+		macros.push({ identifier: decl.name.text, title, filePath: file });
+	}
+}
+
+function extractTitleFromObject(obj: ts.ObjectLiteralExpression): string | null {
+	for (const prop of obj.properties) {
+		if (!ts.isPropertyAssignment(prop)) continue;
+		if (!prop.name || !ts.isIdentifier(prop.name) || prop.name.text !== "title") continue;
+		const init = prop.initializer;
+		if (ts.isStringLiteral(init) || ts.isNoSubstitutionTemplateLiteral(init)) {
+			return init.text;
 		}
 	}
 	return null;
@@ -71,6 +74,17 @@ function collectTsFiles(dir: string): string[] {
 		for (const entry of entries) {
 			if (IGNORED.has(entry)) continue;
 			const full = join(current, entry);
+			// Use lstat to detect symlinks before following them. Skipping symlinks
+			// here prevents recursion into symlink loops (which would stack-overflow)
+			// and avoids escaping the project tree via a symlink to /.
+			let lstat: ReturnType<typeof lstatSync>;
+			try {
+				lstat = lstatSync(full);
+			} catch {
+				continue;
+			}
+			if (lstat.isSymbolicLink()) continue;
+
 			let stats: ReturnType<typeof statSync>;
 			try {
 				stats = statSync(full);

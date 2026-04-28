@@ -4,7 +4,13 @@ export { generateTypes, extractMacros } from "./lib/types";
 export { loadConfig, type LoadedConfig } from "./lib/loaders/config.loader";
 export { loadSpec } from "./lib/loaders/spec.loader";
 export { discoverFeatureFiles, type DiscoveryOptions } from "./lib/loaders/discovery";
-export { Runner, type RunnerOptions, type RunnerResult, configToOrquestraOptions } from "./lib/runner";
+export {
+	ParallelRunner,
+	type ParallelRunnerOptions,
+	type ParallelRunnerResult,
+	configToGlobalOrquestraOptions,
+	configToWorkerOrquestraOptions,
+} from "./lib/runner";
 export {
 	generateArtifact,
 	type ArtifactInput,

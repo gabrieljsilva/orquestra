@@ -1,9 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { FeatureDefinition } from "../../types/bdd";
+import type { FeatureDefinition, ScenarioOptions } from "../../types/bdd";
 import type { StepEvent } from "../../types/events";
 import type { RegistryMacroContext, RegistryMacroTitle } from "../../types/registry";
 import type { FeatureMeta } from "../../types/reporting";
-import { MacroRegistry, OrquestraMacro } from "../orquestra-macro";
 import { BddRunner } from "./bdd.runner";
 
 export enum StepKind {
@@ -29,18 +28,23 @@ export class Step<C extends object, T extends object> {
 
 	async run(ctx: C): Promise<T> {
 		if (!this.fn) throw new Error(`Step "${this.name}" has no implementation`);
+		// Shallow freeze by design: prevents accidental top-level reassignment
+		// while keeping the cost predictable for big response/list payloads.
+		// Sub-objects stay mutable — same contract as Vitest/Jest contexts.
 		return this.fn(Object.freeze({ ...ctx }) as Readonly<C>) as Promise<T>;
 	}
 }
 
 export class Scenario<C extends object = {}> {
 	name: string;
+	readonly timeoutMs?: number;
 	private steps: Array<Step<any, any>> = [];
 	private readonly feature: Feature;
 
-	constructor(name: string, feature: Feature) {
+	constructor(name: string, feature: Feature, options?: ScenarioOptions) {
 		this.name = name;
 		this.feature = feature;
+		this.timeoutMs = options?.timeoutMs;
 	}
 
 	given<T extends object = {}>(name: string, fn: StepFn<C, T>): Scenario<C & T>;
@@ -140,6 +144,7 @@ export class Feature {
 	private readonly as: string;
 	private readonly I: string;
 	private readonly so: string;
+	readonly timeoutMs?: number;
 	private readonly scenarios: Array<Scenario<any>> = [];
 	private readonly registry: Map<string, Step<any, any>> = new Map();
 	private readonly als = new AsyncLocalStorage<Map<string, Step<any, any>>>();
@@ -153,6 +158,7 @@ export class Feature {
 		this.as = definition.as;
 		this.I = definition.I;
 		this.so = definition.so;
+		this.timeoutMs = definition.timeoutMs;
 	}
 
 	pushEvent(evt: StepEvent): void {
@@ -167,9 +173,9 @@ export class Feature {
 		return this.scenarios;
 	}
 
-	scenario(name: string) {
+	scenario(name: string, options?: ScenarioOptions) {
 		return this.withRegistry(() => {
-			const scenario = new Scenario(name, this);
+			const scenario = new Scenario(name, this, options);
 			this.scenarios.push(scenario);
 			return scenario;
 		});
@@ -178,7 +184,19 @@ export class Feature {
 	registerStep(step: Step<any, any>) {
 		const reg = this.getRegistry();
 		const k = this.makeKey(step.kind, step.name);
-		if (!reg.has(k)) reg.set(k, step);
+		if (!reg.has(k)) {
+			// Warn the developer when an inline step shadows an existing macro
+			// with the same title — the inline step wins silently otherwise,
+			// which is hard to debug across modules.
+			const macro = this.container.resolveMacroStep(step.kind, step.name);
+			if (macro && step.fn) {
+				console.warn(
+					`[orquestra] Step "${step.kind} ${step.name}" in feature "${this.name}" shadows a macro with the same title. ` +
+						`The inline step will be used. Rename one of them to avoid ambiguity.`,
+				);
+			}
+			reg.set(k, step);
+		}
 	}
 
 	getStep<C extends object, T extends object>(kind: StepKind, name: string): Step<C, T> | undefined {
@@ -187,13 +205,8 @@ export class Feature {
 	}
 
 	getMacroStep<C extends object, T extends object>(kind: StepKind, name: string): Step<C, T> | undefined {
-		const macro = this.container.getMacro(name);
-		if (!macro) return undefined;
-		const step = new Step<C, T>(kind, name, async () => {
-			const result = await macro.execute();
-			return result as unknown as T;
-		});
-		return step;
+		const factoryStep = this.container.resolveMacroStep(kind, name);
+		return factoryStep as Step<C, T> | undefined;
 	}
 
 	private makeKey(kind: StepKind, name: string) {
@@ -228,20 +241,13 @@ export class Feature {
 	getSo() {
 		return this.so;
 	}
-
-	async test(): Promise<Array<{ scenario: string; context: object }>> {
-		const results: Array<{ scenario: string; context: object }> = [];
-		for (const scenario of this.scenarios) {
-			const context = await this.withRegistry(() => scenario.runAllSteps());
-			results.push({ scenario: scenario.name, context });
-		}
-		return results;
-	}
 }
+
+export type MacroStepFactory = (kind: StepKind, title: string) => Step<any, any> | undefined;
 
 export class BddContainer {
 	private readonly features: Array<Feature> = [];
-	private macroRegistry?: MacroRegistry;
+	private macroStepFactory?: MacroStepFactory;
 
 	define(name: string, definition: FeatureDefinition) {
 		const feature = new Feature(this, name, definition);
@@ -249,12 +255,12 @@ export class BddContainer {
 		return feature;
 	}
 
-	setMacroRegistry(registry: MacroRegistry) {
-		this.macroRegistry = registry;
+	setMacroStepFactory(factory: MacroStepFactory) {
+		this.macroStepFactory = factory;
 	}
 
-	getMacro(title: string): OrquestraMacro | undefined {
-		return this.macroRegistry?.get(title);
+	resolveMacroStep(kind: StepKind, title: string): Step<any, any> | undefined {
+		return this.macroStepFactory?.(kind, title);
 	}
 
 	getFeatureMeta(): FeatureMeta[] {

@@ -1,67 +1,32 @@
-import type { OrquestraConfig, OrquestraOptions } from "@orquestra/core";
+import type { GlobalHookFn, GlobalOrquestraOptions, OrquestraConfig, WorkerOrquestraOptions } from "@orquestra/core";
 
-export function configToOrquestraOptions(config: OrquestraConfig): OrquestraOptions {
-	if (config.global || config.worker) {
-		return {
-			containers: config.global?.containers,
-			httpServer: config.worker?.httpServer,
-			plugins: config.worker?.plugins,
-			helpers: config.worker?.helpers,
-			services: config.worker?.services,
-			macros: config.worker?.macros,
-			env: config.env,
-			logger: config.logger,
-		};
-	}
+function asArray(value: GlobalHookFn | GlobalHookFn[] | undefined): ReadonlyArray<GlobalHookFn> {
+	if (value === undefined) return [];
+	return Array.isArray(value) ? value : [value];
+}
 
+export function configToGlobalOrquestraOptions(config: OrquestraConfig): GlobalOrquestraOptions {
 	return {
-		httpServer: config.httpServer,
-		plugins: config.plugins,
-		helpers: config.helpers,
-		containers: config.containers,
-		services: config.services,
-		macros: config.macros,
+		containers: config.global?.containers,
 		env: config.env,
 		logger: config.logger,
+		beforeProvision: asArray(config.global?.beforeProvision),
+		afterProvision: asArray(config.global?.afterProvision),
+		beforeDeprovision: asArray(config.global?.beforeDeprovision),
+		afterDeprovision: asArray(config.global?.afterDeprovision),
+		hookTimeoutMs: config.serverHookTimeoutMs,
 	};
 }
 
-export function configToGlobalOptions(config: OrquestraConfig): OrquestraOptions {
-	if (config.global || config.worker) {
-		return {
-			containers: config.global?.containers,
-			env: config.env,
-			logger: config.logger,
-		};
-	}
-
+export function configToWorkerOrquestraOptions(config: OrquestraConfig): WorkerOrquestraOptions {
 	return {
-		containers: config.containers,
+		httpServer: config.worker?.httpServer,
+		services: config.worker?.services,
+		macros: config.worker?.macros,
+		modules: config.worker?.modules,
 		env: config.env,
 		logger: config.logger,
-	};
-}
-
-export function configToWorkerOptions(config: OrquestraConfig): OrquestraOptions {
-	if (config.global || config.worker) {
-		return {
-			httpServer: config.worker?.httpServer,
-			plugins: config.worker?.plugins,
-			helpers: config.worker?.helpers,
-			services: config.worker?.services,
-			macros: config.worker?.macros,
-			env: config.env,
-			logger: config.logger,
-		};
-	}
-
-	return {
-		httpServer: config.httpServer,
-		plugins: config.plugins,
-		helpers: config.helpers,
-		services: config.services,
-		macros: config.macros,
-		env: config.env,
-		logger: config.logger,
+		eachHookTimeoutMs: config.eachHookTimeoutMs,
+		serverHookTimeoutMs: config.serverHookTimeoutMs,
 	};
 }

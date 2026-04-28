@@ -1,7 +1,10 @@
-# @orquestra/adapter-express
+# `@orquestra/adapter-express`
 
 Express HTTP adapter for Orquestra. Wraps an `Express` app and exposes a
-Supertest agent through `orquestra.http`.
+SuperTest agent through `orquestra.http`.
+
+For the user-facing overview, see the [root README](../../README.md).
+For migration from v2, see [`MIGRATION.md`](../../MIGRATION.md).
 
 ---
 
@@ -15,7 +18,7 @@ npm i -D @orquestra/core @orquestra/runner @orquestra/adapter-express supertest
 
 ## Usage with the CLI (recommended)
 
-Wire the adapter in `orquestra.config.ts`:
+Wire the adapter under `worker.httpServer` in `orquestra.config.ts`:
 
 ```typescript
 // orquestra.config.ts
@@ -31,11 +34,13 @@ function createApp() {
 }
 
 export default defineConfig({
-  httpServer: async () => {
-    const { app, close } = createApp();
-    const adapter = new OrquestraAdapterExpress(app);
-    adapter.setCloseHandler(close);
-    return adapter;
+  worker: {
+    httpServer: async () => {
+      const { app, close } = createApp();
+      const adapter = new OrquestraAdapterExpress(app);
+      adapter.setCloseHandler(close);
+      return adapter;
+    },
   },
   testMatch: ["**/*.feature.ts"],
 });
@@ -46,15 +51,15 @@ Then in a feature file:
 ```typescript
 // features/health.feature.ts
 import { strictEqual } from "node:assert";
-import { orquestra } from "@orquestra/core";
+import { defineFeature, orquestra } from "@orquestra/core";
 
-const feature = orquestra.feature("health check", {
+const health = defineFeature("health check", {
   as: "any client",
   I: "want to verify the service is up",
   so: "I can trust my monitoring",
 });
 
-feature
+health
   .scenario("root endpoint responds")
   .when("I GET /", async () => {
     const response = await orquestra.http.get("/");
@@ -76,13 +81,13 @@ npx orquestra test
 
 ## Library mode (embedded)
 
-If you're using `new Orquestra(...)` directly:
+If you're using `WorkerOrquestra` directly:
 
 ```typescript
-import { Orquestra } from "@orquestra/core";
+import { WorkerOrquestra } from "@orquestra/core";
 import { OrquestraAdapterExpress } from "@orquestra/adapter-express";
 
-const orquestra = new Orquestra({
+const worker = new WorkerOrquestra({
   httpServer: async () => {
     const { app, close } = createApp();
     const adapter = new OrquestraAdapterExpress(app);
@@ -91,9 +96,9 @@ const orquestra = new Orquestra({
   },
 });
 
-await orquestra.start();
-const res = await orquestra.http.get("/");
-await orquestra.teardown();
+await worker.boot();
+const res = await worker.http.get("/");
+await worker.shutdown();
 ```
 
 ---
@@ -102,6 +107,6 @@ await orquestra.teardown();
 
 - Use `adapter.setCloseHandler(async () => ...)` to release server resources
   on teardown.
-- Add pre-request hooks via
-  `orquestra.get(OrquestraHttpServer).addPreRequestHook(...)` to inject
-  headers or auth tokens. See the `AuthPlugin` example in the playground.
+- Add pre-request hooks via the `OrquestraHttpServer` instance (e.g. inside
+  an `afterStartServer` hook) to inject headers or auth tokens. See the
+  `auth` module in the playground for a working example.

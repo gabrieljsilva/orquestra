@@ -1,7 +1,10 @@
-# @orquestra/adapter-fastify
+# `@orquestra/adapter-fastify`
 
 Fastify HTTP adapter for Orquestra. Wraps a `FastifyInstance` and exposes a
-Supertest agent through `orquestra.http`.
+SuperTest agent through `orquestra.http`.
+
+For the user-facing overview, see the [root README](../../README.md).
+For migration from v2, see [`MIGRATION.md`](../../MIGRATION.md).
 
 ---
 
@@ -15,7 +18,7 @@ npm i -D @orquestra/core @orquestra/runner @orquestra/adapter-fastify supertest 
 
 ## Usage with the CLI (recommended)
 
-Wire the adapter in `orquestra.config.ts`:
+Wire the adapter under `worker.httpServer` in `orquestra.config.ts`:
 
 ```typescript
 // orquestra.config.ts
@@ -34,11 +37,13 @@ async function createApp() {
 }
 
 export default defineConfig({
-  httpServer: async () => {
-    const { app, close } = await createApp();
-    const adapter = new OrquestraAdapterFastify(app);
-    adapter.setCloseHandler(close);
-    return adapter;
+  worker: {
+    httpServer: async () => {
+      const { app, close } = await createApp();
+      const adapter = new OrquestraAdapterFastify(app);
+      adapter.setCloseHandler(close);
+      return adapter;
+    },
   },
   testMatch: ["**/*.feature.ts"],
 });
@@ -49,15 +54,15 @@ Then in a feature file:
 ```typescript
 // features/health.feature.ts
 import { strictEqual } from "node:assert";
-import { orquestra } from "@orquestra/core";
+import { defineFeature, orquestra } from "@orquestra/core";
 
-const feature = orquestra.feature("health check", {
+const health = defineFeature("health check", {
   as: "any client",
   I: "want to verify the service is up",
   so: "I can trust my monitoring",
 });
 
-feature
+health
   .scenario("root endpoint responds")
   .when("I GET /", async () => {
     const response = await orquestra.http.get("/");
@@ -80,10 +85,10 @@ npx orquestra test
 ## Library mode (embedded)
 
 ```typescript
-import { Orquestra } from "@orquestra/core";
+import { WorkerOrquestra } from "@orquestra/core";
 import { OrquestraAdapterFastify } from "@orquestra/adapter-fastify";
 
-const orquestra = new Orquestra({
+const worker = new WorkerOrquestra({
   httpServer: async () => {
     const { app, close } = await createApp();
     const adapter = new OrquestraAdapterFastify(app);
@@ -92,9 +97,9 @@ const orquestra = new Orquestra({
   },
 });
 
-await orquestra.start();
-const res = await orquestra.http.get("/");
-await orquestra.teardown();
+await worker.boot();
+const res = await worker.http.get("/");
+await worker.shutdown();
 ```
 
 ---
@@ -104,5 +109,5 @@ await orquestra.teardown();
 - The Fastify server must be fully initialized (`await app.ready()`) **before**
   creating the adapter — the adapter reads `app.server` immediately.
 - Use `adapter.setCloseHandler(async () => app.close())` for graceful teardown.
-- Pre-request hooks can be added via
-  `orquestra.get(OrquestraHttpServer).addPreRequestHook(...)`.
+- Pre-request hooks can be added via the `OrquestraHttpServer` instance,
+  typically inside an `afterStartServer` hook.

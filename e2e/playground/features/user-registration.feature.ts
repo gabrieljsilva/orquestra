@@ -4,8 +4,8 @@ import { orquestra } from "@orquestra/core";
 import { Factory } from "decorated-factory";
 import { UserEntity } from "../app";
 import { retryUntil } from "../app/utils";
-import { TestAuthService } from "../plugins/auth/services";
-import { TestRabbitmqService } from "../plugins/rabbitmq/service";
+import { TestAuthService } from "../modules/auth";
+import { TestRabbitmqService } from "../modules/rabbitmq";
 
 const factory = new Factory(faker);
 

@@ -5,7 +5,10 @@ import type {
 	ArtifactScenario,
 	ArtifactStep,
 	ArtifactSummary,
+	ArtifactTimings,
 	FeatureMeta,
+	HookEvent,
+	HookFailure,
 	OrquestraArtifact,
 	OrquestraSpec,
 	StepEvent,
@@ -15,12 +18,24 @@ import type {
 export interface ArtifactInput {
 	version: string;
 	events: ReadonlyArray<StepEvent>;
+	hookEvents?: ReadonlyArray<HookEvent>;
 	meta: ReadonlyArray<FeatureMeta>;
 	spec: OrquestraSpec | null;
+	/** Per-feature wall-clock duration keyed by absolute file path. */
+	featureDurationsMs?: Record<string, number>;
+	/** Map of feature name → file path. Used to bind featureDurationsMs to the
+	 * artifact features (which are keyed by name). */
+	featureFilesByName?: Record<string, string>;
 }
 
 export function generateArtifact(input: ArtifactInput): OrquestraArtifact {
-	const features = buildFeatures(input.events, input.meta);
+	const features = buildFeatures(
+		input.events,
+		input.hookEvents ?? [],
+		input.meta,
+		input.featureDurationsMs ?? {},
+		input.featureFilesByName ?? {},
+	);
 	const personas = buildPersonas(features);
 	const domains = buildDomains(features, input.spec);
 	const summary = buildSummary(features);
@@ -38,15 +53,35 @@ export function generateArtifact(input: ArtifactInput): OrquestraArtifact {
 	};
 }
 
-function buildFeatures(events: ReadonlyArray<StepEvent>, meta: ReadonlyArray<FeatureMeta>): ArtifactFeature[] {
+export function attachTimings(artifact: OrquestraArtifact, timings: ArtifactTimings): void {
+	artifact.timings = timings;
+}
+
+function buildFeatures(
+	events: ReadonlyArray<StepEvent>,
+	hookEvents: ReadonlyArray<HookEvent>,
+	meta: ReadonlyArray<FeatureMeta>,
+	featureDurationsMs: Record<string, number>,
+	featureFilesByName: Record<string, string>,
+): ArtifactFeature[] {
 	const eventsByFeature = groupBy(events, (e) => e.feature);
+	const hookEventsByFeature = groupBy(
+		hookEvents.filter((h) => !!h.feature),
+		(h) => h.feature as string,
+	);
 
 	return meta.map((m) => {
 		const featureEvents = eventsByFeature.get(m.feature) ?? [];
-		const scenarios = buildScenarios(featureEvents);
-		const featureStatus = aggregateStatus(scenarios.map((s) => s.status));
+		const featureHookEvents = hookEventsByFeature.get(m.feature) ?? [];
 
-		return {
+		const fileLevelHooks = featureHookEvents.filter((h) => !h.scenario);
+		const scenarioLevelHooks = featureHookEvents.filter((h) => !!h.scenario);
+
+		const scenarios = buildScenarios(featureEvents, scenarioLevelHooks);
+		const featureHookFailures = fileLevelHooks.map(toHookFailure);
+		const featureStatus = aggregateFeatureStatus(scenarios, featureHookFailures);
+
+		const result: ArtifactFeature = {
 			name: m.feature,
 			domain: m.domain ?? null,
 			context: m.context ?? null,
@@ -56,12 +91,29 @@ function buildFeatures(events: ReadonlyArray<StepEvent>, meta: ReadonlyArray<Fea
 			status: featureStatus,
 			scenarios,
 		};
+
+		if (featureHookFailures.length > 0) {
+			result.hookFailures = featureHookFailures;
+		}
+
+		const file = featureFilesByName[m.feature];
+		if (file) {
+			result.file = file;
+			const wallClock = featureDurationsMs[file];
+			if (typeof wallClock === "number") {
+				result.durationMs = wallClock;
+			}
+		}
+
+		return result;
 	});
 }
 
-function buildScenarios(events: StepEvent[]): ArtifactScenario[] {
+function buildScenarios(events: StepEvent[], scenarioHookEvents: HookEvent[]): ArtifactScenario[] {
 	const eventsByScenario = groupBy(events, (e) => e.scenario);
+	const hooksByScenario = groupBy(scenarioHookEvents, (h) => h.scenario as string);
 	const scenarios: ArtifactScenario[] = [];
+	const seen = new Set<string>();
 
 	for (const [scenarioName, scenarioEvents] of eventsByScenario) {
 		const steps: ArtifactStep[] = scenarioEvents.map((e) => ({
@@ -72,14 +124,59 @@ function buildScenarios(events: StepEvent[]): ArtifactScenario[] {
 			error: e.error,
 		}));
 
+		const hookFailures = (hooksByScenario.get(scenarioName) ?? []).map(toHookFailure);
+		const stepStatus = aggregateStatus(steps.map((s) => s.status));
+		const status: StepStatus = hookFailures.length > 0 ? "failed" : stepStatus;
+
+		const scenario: ArtifactScenario = {
+			name: scenarioName,
+			status,
+			steps,
+			durationMs: sumDurations(steps, hookFailures),
+		};
+
+		if (hookFailures.length > 0) {
+			scenario.hookFailures = hookFailures;
+		}
+
+		scenarios.push(scenario);
+		seen.add(scenarioName);
+	}
+
+	for (const [scenarioName, hooks] of hooksByScenario) {
+		if (seen.has(scenarioName)) continue;
 		scenarios.push({
 			name: scenarioName,
-			status: aggregateStatus(steps.map((s) => s.status)),
-			steps,
+			status: "failed",
+			steps: [],
+			hookFailures: hooks.map(toHookFailure),
 		});
 	}
 
 	return scenarios;
+}
+
+function aggregateFeatureStatus(scenarios: ArtifactScenario[], featureHookFailures: HookFailure[]): StepStatus {
+	if (featureHookFailures.length > 0) return "failed";
+	return aggregateStatus(scenarios.map((s) => s.status));
+}
+
+function sumDurations(steps: ArtifactStep[], hookFailures: HookFailure[]): number {
+	let total = 0;
+	for (const s of steps) total += s.durationMs ?? 0;
+	for (const h of hookFailures) total += h.durationMs ?? 0;
+	return total;
+}
+
+function toHookFailure(event: HookEvent): HookFailure {
+	const failure: HookFailure = {
+		hookName: event.hookName,
+		error: event.error,
+	};
+	if (event.feature) failure.feature = event.feature;
+	if (event.scenario) failure.scenario = event.scenario;
+	if (event.durationMs !== undefined) failure.durationMs = event.durationMs;
+	return failure;
 }
 
 function buildPersonas(features: ArtifactFeature[]): ArtifactPersona[] {
@@ -140,6 +237,8 @@ function buildSummary(features: ArtifactFeature[]): ArtifactSummary {
 
 function computeOverallStatus(features: ArtifactFeature[]): StepStatus {
 	const statuses = features.flatMap((f) => f.scenarios.map((s) => s.status));
+	const featureLevelHasFailure = features.some((f) => (f.hookFailures?.length ?? 0) > 0);
+	if (featureLevelHasFailure) return "failed";
 	return aggregateStatus(statuses);
 }
 

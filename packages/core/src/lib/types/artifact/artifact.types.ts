@@ -1,4 +1,5 @@
 import type { StepStatus } from "../events";
+import type { HookFailure } from "../lifecycle/hook.types";
 
 export interface ArtifactPersona {
 	name: string;
@@ -23,6 +24,29 @@ export interface ArtifactScenario {
 	name: string;
 	status: StepStatus;
 	steps: ArtifactStep[];
+	hookFailures?: HookFailure[];
+	/** Sum of all step durations + hookFailure durations for this scenario. */
+	durationMs?: number;
+}
+
+/**
+ * Wall-clock breakdown of a single feature file inside a worker.
+ *
+ * - `bootMs`     — from `feature:assign` until afterStartServer hooks finish
+ *                  (import + service resolve + beforeStartServer + http boot +
+ *                  afterStartServer). This is the per-file overhead that
+ *                  doesn't scale with how many scenarios you have.
+ * - `scenariosMs`— from the first scenario starting to the last scenario
+ *                  finishing. Pure execution.
+ * - `teardownMs` — from beforeStopServer hooks until the worker is done
+ *                  with the file.
+ * - `totalMs`    — convenience sum (matches the previous `durationMs`).
+ */
+export interface FeatureTimings {
+	bootMs: number;
+	scenariosMs: number;
+	teardownMs: number;
+	totalMs: number;
 }
 
 export interface ArtifactFeature {
@@ -34,6 +58,13 @@ export interface ArtifactFeature {
 	so: string;
 	status: StepStatus;
 	scenarios: ArtifactScenario[];
+	hookFailures?: HookFailure[];
+	file?: string;
+	crashed?: boolean;
+	/** Wall-clock time the file took inside the worker (assign → done).
+	 * Kept for back-compat; equals `timings.totalMs` when present. */
+	durationMs?: number;
+	timings?: FeatureTimings;
 }
 
 export interface ArtifactSummary {
@@ -42,6 +73,55 @@ export interface ArtifactSummary {
 	passed: number;
 	failed: number;
 	pending: number;
+}
+
+export interface ArtifactContainerTiming {
+	name: string;
+	startupMs: number;
+}
+
+export interface ArtifactServerBootStats {
+	/** Number of feature files that recorded a boot. */
+	count: number;
+	/** Sum of all `feature.timings.bootMs`. */
+	totalMs: number;
+	meanMs: number;
+	medianMs: number;
+	p95Ms: number;
+}
+
+export interface ArtifactCollectionTimings {
+	/** Sum of the three breakdowns. */
+	totalMs: number;
+	/** loadConfig — includes jiti+swc warmup the first time it runs. */
+	loadConfigMs: number;
+	/** loadSpec — reuses the same jiti instance, so this is purely the spec import. */
+	loadSpecMs: number;
+	/** globSync over `testMatch`. */
+	discoveryMs: number;
+}
+
+export interface ArtifactTimings {
+	/** Wall-clock total: from CLI entry to artifact written. */
+	totalMs: number;
+	/** Discovery + loadConfig + loadSpec + jiti warmup, before the runner starts. */
+	collectionMs: number;
+	/** Per-step breakdown of `collectionMs` for performance debugging. */
+	collection?: ArtifactCollectionTimings;
+	/** Containers up (provision). */
+	provisionMs: number;
+	/** Manager.run() wall-clock — spawn + drain. Includes workerStartup + scenarios + per-file overhead. */
+	executionMs: number;
+	/** Time from the manager starting until the first scenario emits an event. */
+	workerStartupMs: number;
+	/** Time from the first scenario event to the last — pure scenario execution. */
+	scenariosMs: number;
+	/** Containers down (deprovision). */
+	deprovisionMs: number;
+	workerCount: number;
+	containers: ArtifactContainerTiming[];
+	/** Aggregated stats over per-feature `bootMs`. */
+	serverBoot: ArtifactServerBootStats;
 }
 
 export interface OrquestraArtifact {
@@ -53,4 +133,5 @@ export interface OrquestraArtifact {
 	domains: ArtifactDomain[];
 	features: ArtifactFeature[];
 	summary: ArtifactSummary;
+	timings?: ArtifactTimings;
 }

@@ -1,3 +1,5 @@
+import type { HookKind } from "../lifecycle/hook.types";
+
 export type StepStatus = "pending" | "success" | "failed";
 
 export interface StepEvent {
@@ -9,4 +11,19 @@ export interface StepEvent {
 	status: StepStatus;
 	durationMs?: number;
 	error?: { message: string; stack?: string };
+}
+
+/**
+ * Emitted only when a hook FAILS. Hooks are otherwise silent.
+ * `feature`/`scenario` are populated for `beforeEach`/`afterEach` failures;
+ * file-scoped hooks (`beforeStartServer`, `afterStartServer`, `beforeStopServer`)
+ * carry the file path in `file` instead.
+ */
+export interface HookEvent {
+	hookName: HookKind;
+	file?: string;
+	feature?: string;
+	scenario?: string;
+	error: { message: string; stack?: string };
+	durationMs?: number;
 }

@@ -1,7 +1,6 @@
 import { strictEqual } from "node:assert";
 import { orquestra } from "@orquestra/core";
-import { AuthPlugin } from "../plugins/auth/auth.plugin";
-import { TestAuthService } from "../plugins/auth/services";
+import { AuthService, TestAuthService } from "../modules/auth";
 
 const feature = orquestra.feature("authorization", {
 	context:
@@ -16,7 +15,7 @@ feature
 	.scenario("should reject unauthenticated requests with 401")
 	.given("there is a clean database")
 	.given("I have no authentication token", () => {
-		const authPlugin = orquestra.get(AuthPlugin);
+		const authPlugin = orquestra.get(AuthService);
 		authPlugin.clearToken();
 	})
 	.when('I send GET to "/users"', async () => {
@@ -35,7 +34,7 @@ feature
 		const authService = orquestra.get(TestAuthService);
 		await authService.createUser(user);
 		const { token } = await authService.makeLogin({ email: user.email, password: user.password });
-		const authPlugin = orquestra.get(AuthPlugin);
+		const authPlugin = orquestra.get(AuthService);
 		authPlugin.setToken(token);
 		return { token };
 	})

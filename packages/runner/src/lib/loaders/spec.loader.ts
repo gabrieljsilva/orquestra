@@ -1,10 +1,12 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { OrquestraSpec } from "@orquestra/core";
-import { createOrquestraJiti } from "../transform";
+import { createOrquestraJiti, type Jiti } from "../transform";
 
 export interface LoadSpecOptions {
 	tsconfigPath?: string;
+	/** Reuse an existing jiti instance instead of creating one. */
+	jiti?: Jiti;
 }
 
 export async function loadSpec(
@@ -20,11 +22,13 @@ export async function loadSpec(
 		throw new Error(`Spec file not found: ${filePath}`);
 	}
 
-	const jiti = createOrquestraJiti({
-		id: import.meta.url,
-		cwd: configDir,
-		tsconfigPath: options.tsconfigPath,
-	});
+	const jiti =
+		options.jiti ??
+		createOrquestraJiti({
+			id: import.meta.url,
+			cwd: configDir,
+			tsconfigPath: options.tsconfigPath,
+		});
 
 	const imported = await jiti.import(filePath);
 	const spec = (imported as any).default ?? imported;

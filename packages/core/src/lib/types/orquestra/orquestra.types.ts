@@ -1,48 +1,14 @@
-import { LoadEnvOptions } from "../../helpers/env";
-import { Logger } from "../../internal/logger";
-import { ContainerProvider, HelperProvider, MacroProvider, PluginProvider, ServiceProvider } from "../components";
-import { IHttpServerAdapter } from "../http-server";
-import { IIocContainer } from "../ioc";
+import type { IIocContainer } from "../ioc";
 
+/**
+ * Minimal context contract exposed to injectable components. Provides access
+ * to the IoC container, which is the canonical way to fetch other services
+ * and helpers (e.g. `this.ctx.container.get(EnvHelper)`).
+ *
+ * Provider registration is handled internally by the Bootstrap orchestrator
+ * during the resolution phase — components no longer mutate the context at
+ * runtime in v3.
+ */
 export interface IOrquestraContext {
 	container: IIocContainer;
-
-	// Injectable components
-	httpServer?: IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>);
-	plugins: Array<PluginProvider>;
-	helpers: Array<HelperProvider>;
-	containers: Array<ContainerProvider>;
-	services: Array<ServiceProvider>;
-	macros: Array<MacroProvider>;
-
-	// Registration methods
-	registerHttpServer(httpServer: IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>)): void;
-	registerPlugins(plugins: Array<PluginProvider>): void;
-	registerHelpers(helpers: Array<HelperProvider>): void;
-	registerContainers(containers: Array<ContainerProvider>): void;
-	registerServices(services: Array<ServiceProvider>): void;
-	registerMacros(macros: Array<MacroProvider>): void;
-
-	// Getter methods
-	getHttpServer(): IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>) | undefined;
-	getPluginProviders(): Array<PluginProvider>;
-	getHelperProviders(): Array<HelperProvider>;
-	getContainerProviders(): Array<ContainerProvider>;
-	getServiceProviders(): Array<ServiceProvider>;
-	getMacroProviders(): Array<MacroProvider>;
-}
-
-export interface OrquestraOptions {
-	httpServer?: IHttpServerAdapter | (() => IHttpServerAdapter | Promise<IHttpServerAdapter>);
-	plugins?: Array<PluginProvider>;
-	helpers?: Array<HelperProvider>;
-	containers?: Array<ContainerProvider>;
-	services?: Array<ServiceProvider>;
-	macros?: Array<MacroProvider>;
-	env?: LoadEnvOptions;
-	logger?: Logger;
-}
-
-export interface OrquestraBootstrapOptions {
-	skipContainers?: boolean;
 }

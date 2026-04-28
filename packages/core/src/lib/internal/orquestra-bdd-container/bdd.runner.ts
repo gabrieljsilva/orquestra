@@ -28,6 +28,12 @@ export class BddRunner {
 					stepName: step.name,
 					keyword,
 					status: "pending",
+					error: {
+						message:
+							`Step "${step.name}" has no implementation. ` +
+							`Either provide a function (e.g. .${keyword.toLowerCase()}("${step.name}", (ctx) => { ... })) ` +
+							`or check that the title matches an existing macro.`,
+					},
 				};
 				feature.pushEvent(evt);
 				continue;
@@ -36,7 +42,11 @@ export class BddRunner {
 			const startTime = performance.now();
 			try {
 				const delta = await step.run(ctx);
-				if (delta && typeof delta === "object") {
+				if (delta === undefined) {
+					// Step returned void — keep previous ctx as-is. Without this
+					// guard, `then` steps (which usually return void) would wipe
+					// `ctx.result` set by a prior `when`.
+				} else if (delta !== null && typeof delta === "object") {
 					ctx = { ...ctx, ...delta };
 				} else {
 					ctx = { ...ctx, result: delta };

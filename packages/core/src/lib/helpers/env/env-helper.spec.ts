@@ -49,9 +49,30 @@ describe("EnvHelper", () => {
 		delete process.env.SYSTEM_VAR;
 	});
 
-	it("clear seta string vazia", () => {
+	it("clear remove a chave do process.env e do state interno", () => {
 		const env = new EnvHelper(makeCtx(), { fromValues: { FOO: "bar" } });
 		env.clear("FOO");
-		expect(env.get("FOO")).toBe("");
+		expect(env.get("FOO")).toBeUndefined();
+		expect("FOO" in process.env).toBe(false);
+	});
+
+	it("restore deleta a chave quando ela nao existia no snapshot original", () => {
+		delete process.env.NEW_KEY;
+		const env = new EnvHelper(makeCtx());
+		env.override("NEW_KEY", "v1");
+		expect(process.env.NEW_KEY).toBe("v1");
+
+		env.restore("NEW_KEY");
+		expect("NEW_KEY" in process.env).toBe(false);
+		expect(env.get("NEW_KEY")).toBeUndefined();
+	});
+
+	it("restoreAll remove chaves criadas apos o snapshot", () => {
+		delete process.env.NEW_KEY;
+		const env = new EnvHelper(makeCtx());
+		env.override("NEW_KEY", "v1");
+
+		env.restoreAll();
+		expect("NEW_KEY" in process.env).toBe(false);
 	});
 });

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { config } from "dotenv";
-import { OrquestraHelper } from "../../internal/orquestra-helper";
+import { Injectable } from "../../internal/ioc-container";
 import { IOrquestraContext } from "../../types";
 
 export interface LoadEnvOptions {
@@ -9,7 +9,7 @@ export interface LoadEnvOptions {
 	fromValues?: Record<string, string>;
 }
 
-export class EnvHelper extends OrquestraHelper {
+export class EnvHelper extends Injectable {
 	private envVariables: Record<string, string> = {};
 	public readonly originalEnvVariables: Readonly<Record<string, string | undefined>>;
 
@@ -73,13 +73,18 @@ export class EnvHelper extends OrquestraHelper {
 		}
 	}
 
-	public override(key: string, value: string): void {
+	public override(key: string, value: string | undefined): void {
+		if (value === undefined) {
+			delete this.envVariables[key];
+			delete process.env[key];
+			return;
+		}
 		this.envVariables[key] = value;
 		process.env[key] = value;
 	}
 
 	public clear(key: string) {
-		this.override(key, "");
+		this.override(key, undefined);
 	}
 
 	public get(key: string): string | undefined {
@@ -95,6 +100,11 @@ export class EnvHelper extends OrquestraHelper {
 	}
 
 	public restoreAll() {
+		for (const key of Object.keys(this.envVariables)) {
+			if (!(key in this.originalEnvVariables)) {
+				this.override(key, undefined);
+			}
+		}
 		for (const [key, value] of Object.entries(this.originalEnvVariables)) {
 			this.override(key, value);
 		}
