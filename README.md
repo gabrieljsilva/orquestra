@@ -281,6 +281,48 @@ authenticate) and Redis fixtures (seed once; workers use a key prefix).
 
 ---
 
+## Attachments & logs
+
+Some checks aren't strict asserts — an AI agent's free-form reply, a
+screenshot, a JSON tree a PM wants to eyeball. `attach` and `log` are
+top-level helpers that bind arbitrary content to the currently-running
+step and emit it into `artifact.json`:
+
+```ts
+import { attach, log } from "@orquestra/core";
+
+scenario.when("user asks for recommendations", async ({ user }) => {
+  const response = await ai.chat({ user: user.id, prompt: "..." });
+
+  attach({ name: "AI response", type: "markdown", data: response.text });
+  attach({ name: "Tool calls",  type: "json",     data: response.toolCalls });
+  log("model", response.model);
+  log("token_cost", response.usage);
+
+  return { response };
+});
+```
+
+| Helper | Use it for                                           |
+| ------ | ---------------------------------------------------- |
+| `attach({ name, type, data })` | content the reader will *open and read* (text, markdown, json, image, file) |
+| `log(label, value)`            | small key/value the UI can *filter, group, chart* |
+
+Attachments under `inlineThresholdBytes` (default 50 KB) live inside
+`artifact.json`; larger ones and any binary (image/file) spill to
+`outputDir/attachments/<scenarioId>/...` and are referenced by relative
+path on the step.
+
+**Rules:** call `attach` / `log` only inside step callbacks, and `await`
+every async branch of the step before returning — fire-and-forget
+promises that resolve after the step ends throw an explicit error to
+surface the bug. Hook support is not in v3; use a step for diagnostics.
+
+See [packages/core/README.md](packages/core/README.md#attachments--logs--attach--log)
+for the full reference (supported types, error messages, output schema).
+
+---
+
 ## Time budgets
 
 Three knobs cap how long each kind of work can run. Defaults are

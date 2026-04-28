@@ -1,3 +1,4 @@
+import type { ArtifactAttachment, ArtifactLog } from "../attachments";
 import type { StepStatus } from "../events";
 import type { HookFailure } from "../lifecycle/hook.types";
 
@@ -18,6 +19,8 @@ export interface ArtifactStep {
 	status: StepStatus;
 	durationMs?: number;
 	error?: { message: string; stack?: string };
+	attachments?: ArtifactAttachment[];
+	logs?: ArtifactLog[];
 }
 
 export interface ArtifactScenario {

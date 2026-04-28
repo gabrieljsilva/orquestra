@@ -1,5 +1,46 @@
 # @orquestra/core
 
+## 3.0.0
+
+### Minor Changes
+
+- **Attachments & logs (`attach` / `log`).** Two top-level helpers exported
+  from `@orquestra/core` for binding diagnostics to the running step:
+
+  ```ts
+  import { attach, log } from "@orquestra/core";
+
+  scenario.when("ai answers", async ({ user }) => {
+    const r = await ai.chat({ user: user.id });
+    attach({ name: "AI response", type: "markdown", data: r.text });
+    attach({ name: "Tool calls",  type: "json",     data: r.toolCalls });
+    log("model", r.model);
+    log("token_cost", r.usage);
+  });
+  ```
+
+  - Five attachment types: `text`, `markdown`, `json`, `image`, `file`.
+  - Inline storage in `artifact.json` for small payloads; binaries and
+    oversized text/json spill to `outputDir/attachments/<scenarioId>/`,
+    referenced by relative path on the step.
+  - Each `ArtifactAttachment` and `ArtifactLog` carries an ISO `timestamp`
+    so viewers can interleave them chronologically inside a step.
+  - New `OrquestraConfig.inlineThresholdBytes` (default 50 KB).
+  - New types: `AttachmentInput`, `AttachmentType`, `AttachmentEvent`,
+    `ArtifactAttachment`, `ArtifactLog`. `StepEvent` and `ArtifactStep`
+    gain optional `attachments` and `logs` fields (non-breaking).
+  - Console reporter now appends `[N attachments, M logs]` per step.
+  - **Rules:** call `attach` / `log` only inside a step callback, and
+    `await` every async branch the step touches. Calls outside throw
+    `attach()/log() must be called inside a step or hook callback`;
+    fire-and-forget calls that resolve after the step ends throw
+    `called after step "X" finished`.
+  - Hook support (`beforeEachScenario` / `afterEachScenario` etc.) is
+    not in this release — diagnostics from a failed scenario must be
+    captured inside the step itself for now.
+
+  See `packages/core/README.md` for the full reference.
+
 ## 2.1.0
 
 ### Minor Changes

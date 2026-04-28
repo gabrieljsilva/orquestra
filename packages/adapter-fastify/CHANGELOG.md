@@ -1,5 +1,13 @@
 # @orquestra/adapter-fastify
 
+## 3.0.0
+
+### Patch Changes
+
+- Coordinated version bump to align the `fixed` package group with
+  `@orquestra/core@3.0.0`. No functional changes in this adapter — see
+  the `@orquestra/core` changelog for the new `attach` / `log` helpers.
+
 ## 2.1.0
 
 ### Minor Changes

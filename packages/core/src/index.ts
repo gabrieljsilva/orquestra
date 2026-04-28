@@ -17,6 +17,7 @@ export {
 export type { OrquestraFacade } from "./lib/orquestra/global";
 
 export { BddContainer, BddRunner, Feature, Scenario, Step, StepKind } from "./lib/internal/orquestra-bdd-container";
+export { attach, log } from "./lib/internal/attachments";
 export { TimeoutError, withTimeout } from "./lib/internal/timeout";
 export { OrquestraContainer } from "./lib/internal/orquestra-container";
 export { OrquestraService } from "./lib/internal/orquestra-service";
@@ -79,6 +80,11 @@ export {
 	ArtifactContainerTiming,
 	ArtifactCollectionTimings,
 	ArtifactServerBootStats,
+	ArtifactAttachment,
+	ArtifactLog,
+	AttachmentEvent,
+	AttachmentInput,
+	AttachmentType,
 	FeatureTimings,
 	OrquestraRegistry,
 	RegistryPersona,

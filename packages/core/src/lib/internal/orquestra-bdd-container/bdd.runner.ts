@@ -1,11 +1,16 @@
 import { createHash } from "node:crypto";
 import type { StepEvent } from "../../types/events";
+import { StepCollector, setCurrentStepContext } from "../attachments";
 
 const keywordOf = (k: string): "Given" | "When" | "Then" => {
 	if (k === "GIVEN") return "Given";
 	if (k === "WHEN") return "When";
 	return "Then";
 };
+
+function scenarioIdOf(featureName: string, scenarioName: string): string {
+	return createHash("sha1").update(`${featureName}${scenarioName}`).digest("hex");
+}
 
 export class BddRunner {
 	static computeStepId(feature: string, scenario: string, keyword: string, stepName: string): string {
@@ -15,6 +20,7 @@ export class BddRunner {
 	static async runScenario(scenario: any, initialCtx: object = {}): Promise<any> {
 		let ctx: any = { ...(initialCtx as object) };
 		const feature = scenario.feature as any;
+		const scenarioId = scenarioIdOf(feature.getName(), scenario.name);
 
 		for (const step of (scenario as any).steps as Array<any>) {
 			const keyword = keywordOf(step.kind);
@@ -39,6 +45,8 @@ export class BddRunner {
 				continue;
 			}
 
+			const collector = new StepCollector();
+			setCurrentStepContext({ collector, scenarioId, stepId, phase: "step" });
 			const startTime = performance.now();
 			try {
 				const delta = await step.run(ctx);
@@ -61,6 +69,8 @@ export class BddRunner {
 					status: "success",
 					durationMs,
 				};
+				if (collector.attachments.length > 0) evt.attachments = [...collector.attachments];
+				if (collector.logs.length > 0) evt.logs = [...collector.logs];
 				feature.pushEvent(evt);
 			} catch (err: any) {
 				const durationMs = Math.round(performance.now() - startTime);
@@ -74,8 +84,13 @@ export class BddRunner {
 					durationMs,
 					error: { message: String(err?.message ?? err), stack: err?.stack },
 				};
+				if (collector.attachments.length > 0) evt.attachments = [...collector.attachments];
+				if (collector.logs.length > 0) evt.logs = [...collector.logs];
 				feature.pushEvent(evt);
 				throw err;
+			} finally {
+				collector.freeze();
+				setCurrentStepContext(null);
 			}
 		}
 		return ctx;

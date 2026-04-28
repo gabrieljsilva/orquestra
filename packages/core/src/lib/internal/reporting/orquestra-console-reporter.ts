@@ -65,7 +65,8 @@ export class OrquestraConsoleReporter extends OrquestraReporter {
 		const branch = isLast ? "└──" : "├──";
 		const symbol = SYMBOL[step.status] ?? "?";
 		const duration = step.durationMs !== undefined ? c.dim(` (${step.durationMs}ms)`) : "";
-		const line = `    ${branch} ${symbol} ${step.keyword} ${step.name}${duration}`;
+		const extras = formatExtras(step);
+		const line = `    ${branch} ${symbol} ${step.keyword} ${step.name}${duration}${extras}`;
 
 		if (step.status === "failed") {
 			console.log(c.red(line));
@@ -102,4 +103,15 @@ export class OrquestraConsoleReporter extends OrquestraReporter {
 		const startsWithVowel = /^[aeiou]/i.test(trimmed);
 		return `${startsWithVowel ? "an" : "a"} ${trimmed}`;
 	}
+}
+
+function formatExtras(step: ArtifactStep): string {
+	const parts: string[] = [];
+	if (step.attachments && step.attachments.length > 0) {
+		parts.push(`${step.attachments.length} attachment${step.attachments.length === 1 ? "" : "s"}`);
+	}
+	if (step.logs && step.logs.length > 0) {
+		parts.push(`${step.logs.length} log${step.logs.length === 1 ? "" : "s"}`);
+	}
+	return parts.length > 0 ? c.dim(` [${parts.join(", ")}]`) : "";
 }

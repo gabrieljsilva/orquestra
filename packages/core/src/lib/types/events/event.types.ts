@@ -1,3 +1,4 @@
+import type { ArtifactLog, AttachmentEvent } from "../attachments";
 import type { HookKind } from "../lifecycle/hook.types";
 
 export type StepStatus = "pending" | "success" | "failed";
@@ -11,6 +12,8 @@ export interface StepEvent {
 	status: StepStatus;
 	durationMs?: number;
 	error?: { message: string; stack?: string };
+	attachments?: AttachmentEvent[];
+	logs?: ArtifactLog[];
 }
 
 /**

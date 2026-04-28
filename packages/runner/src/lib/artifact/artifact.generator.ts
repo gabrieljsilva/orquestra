@@ -1,4 +1,5 @@
 import type {
+	ArtifactAttachment,
 	ArtifactDomain,
 	ArtifactFeature,
 	ArtifactPersona,
@@ -6,6 +7,7 @@ import type {
 	ArtifactStep,
 	ArtifactSummary,
 	ArtifactTimings,
+	AttachmentEvent,
 	FeatureMeta,
 	HookEvent,
 	HookFailure,
@@ -116,13 +118,22 @@ function buildScenarios(events: StepEvent[], scenarioHookEvents: HookEvent[]): A
 	const seen = new Set<string>();
 
 	for (const [scenarioName, scenarioEvents] of eventsByScenario) {
-		const steps: ArtifactStep[] = scenarioEvents.map((e) => ({
-			keyword: e.keyword,
-			name: e.stepName,
-			status: e.status,
-			durationMs: e.durationMs,
-			error: e.error,
-		}));
+		const steps: ArtifactStep[] = scenarioEvents.map((e) => {
+			const step: ArtifactStep = {
+				keyword: e.keyword,
+				name: e.stepName,
+				status: e.status,
+				durationMs: e.durationMs,
+				error: e.error,
+			};
+			if (e.attachments && e.attachments.length > 0) {
+				step.attachments = e.attachments.map(toArtifactAttachment);
+			}
+			if (e.logs && e.logs.length > 0) {
+				step.logs = [...e.logs];
+			}
+			return step;
+		});
 
 		const hookFailures = (hooksByScenario.get(scenarioName) ?? []).map(toHookFailure);
 		const stepStatus = aggregateStatus(steps.map((s) => s.status));
@@ -166,6 +177,19 @@ function sumDurations(steps: ArtifactStep[], hookFailures: HookFailure[]): numbe
 	for (const s of steps) total += s.durationMs ?? 0;
 	for (const h of hookFailures) total += h.durationMs ?? 0;
 	return total;
+}
+
+function toArtifactAttachment(event: AttachmentEvent): ArtifactAttachment {
+	const attachment: ArtifactAttachment = {
+		name: event.name,
+		type: event.type,
+		bytes: event.bytes,
+		timestamp: event.timestamp,
+	};
+	if (event.mimeType !== undefined) attachment.mimeType = event.mimeType;
+	if (event.path !== undefined) attachment.path = event.path;
+	else if (event.inline !== undefined) attachment.inline = event.inline;
+	return attachment;
 }
 
 function toHookFailure(event: HookEvent): HookFailure {

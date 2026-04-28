@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import type { Feature, HookFailure, Scenario, StepEvent, WorkerOrquestra } from "@orquestra/core";
 import { BddRunner, initOrquestra, resetOrquestraInstance } from "@orquestra/core";
+import { spilloverStepEvent } from "./lib/attachments/spillover";
 import { loadConfig } from "./lib/loaders/config.loader";
 import { configToWorkerOrquestraOptions } from "./lib/runner/config-mapper";
 import type { MainToWorkerMessage, WorkerToMainMessage } from "./lib/runner/ipc-protocol";
 import { readHeapUsedBytes } from "./lib/runner/memory-monitor";
+import { resolveOutputDir } from "./lib/runner/output-dir";
 import { resolveScenarioTimeout, runScenarioBody } from "./lib/runner/scenario-runner";
 import { createOrquestraJiti } from "./lib/transform";
 
@@ -71,6 +73,8 @@ async function main() {
 
 	const scenarioTimeoutDefaultMs = config.scenarioTimeoutMs ?? DEFAULT_SCENARIO_TIMEOUT_MS;
 	const reportHeap = (config.workerMemoryLimitMb ?? 0) > 0;
+	const outputDir = resolveOutputDir(config, configDir);
+	const inlineThresholdBytes = config.inlineThresholdBytes;
 
 	const processFeature = async (file: string) => {
 		const t0 = Date.now();
@@ -137,7 +141,10 @@ async function main() {
 						tScenariosStart = Date.now();
 						try {
 							for (const feature of featuresInFile) {
-								await executeFeature(orq, feature, scenarioTimeoutDefaultMs);
+								await executeFeature(orq, feature, scenarioTimeoutDefaultMs, {
+									outputDir,
+									inlineThresholdBytes,
+								});
 							}
 
 							for (const meta of orq.getFeatureMeta()) {
@@ -264,7 +271,17 @@ function emitFileHookFailures(failures: HookFailure[], file: string, features: R
 	}
 }
 
-async function executeFeature(orq: WorkerOrquestra, feature: Feature, defaultTimeoutMs: number): Promise<void> {
+interface AttachmentSpilloverConfig {
+	outputDir: string;
+	inlineThresholdBytes?: number;
+}
+
+async function executeFeature(
+	orq: WorkerOrquestra,
+	feature: Feature,
+	defaultTimeoutMs: number,
+	spillover: AttachmentSpilloverConfig,
+): Promise<void> {
 	const knownEventCounts = new Map<string, number>();
 	const featureName = feature.getName();
 	const featureHookFailures: HookFailure[] = [];
@@ -316,7 +333,11 @@ async function executeFeature(orq: WorkerOrquestra, feature: Feature, defaultTim
 			const events = feature.getEvents();
 			const prevCount = knownEventCounts.get(featureName) ?? 0;
 			for (let i = prevCount; i < events.length; i++) {
-				send({ type: "step:event", event: events[i] });
+				const evt = events[i];
+				const processed = evt.attachments?.length
+					? spilloverStepEvent(evt, scenarioIdOf(evt.feature, evt.scenario), spillover)
+					: evt;
+				send({ type: "step:event", event: processed });
 			}
 			knownEventCounts.set(featureName, events.length);
 
@@ -342,6 +363,10 @@ async function executeFeature(orq: WorkerOrquestra, feature: Feature, defaultTim
 			event: { hookName: failure.hookName, feature: featureName, error: failure.error, durationMs: failure.durationMs },
 		});
 	}
+}
+
+function scenarioIdOf(featureName: string, scenarioName: string): string {
+	return createHash("sha1").update(`${featureName}${scenarioName}`).digest("hex");
 }
 
 /**

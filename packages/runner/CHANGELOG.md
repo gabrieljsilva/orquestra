@@ -1,5 +1,17 @@
 # @orquestra/runner
 
+## 3.0.0
+
+### Minor Changes
+
+- **Attachment spillover.** The worker now writes oversized and binary
+  attachments to `outputDir/attachments/<scenarioId>/<n>-<safeName>.<ext>`
+  before forwarding the step event over IPC, replacing the inline payload
+  with a relative `path` on the artifact. Small text/markdown/json under
+  `inlineThresholdBytes` (default 50 KB) stay inline. Image and file
+  attachments are always spilled. See the `@orquestra/core` changelog for
+  the user-facing API (`attach` / `log`).
+
 ## 2.1.0
 
 ### Minor Changes

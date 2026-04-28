@@ -7,6 +7,7 @@ export * from "./reporting";
 export * from "./events";
 export * from "./config";
 export * from "./artifact";
+export * from "./attachments";
 export * from "./registry";
 export * from "./define";
 export * from "./bdd";

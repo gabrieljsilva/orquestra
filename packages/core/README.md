@@ -38,6 +38,22 @@ import {
 The same names are also available on the `orquestra` facade
 (`orquestra.beforeStartServer(...)`).
 
+### Step-scoped helpers
+
+```ts
+import { attach, log } from "@orquestra/core";
+```
+
+| Symbol | Form | Purpose |
+|---|---|---|
+| `attach({ name, type, data, mimeType? })` | function | Bind rich content (text/markdown/json/image/file) to the running step |
+| `log(label, value)` | function | Bind a small key/value pair to the running step |
+
+Both are bound to the **currently-executing step callback** by a process-local
+singleton — they throw if called outside a step. See
+[Attachments & logs](#attachments--logs--attach--log) below for the full
+reference (rules of use, supported types, error messages, output schema).
+
 ### Worker / global instances
 
 | Symbol | Use |
@@ -79,6 +95,7 @@ The HTML reporter was removed in v3 — build a custom reporter on top of
 export type { HookFn, HookContext, HookKind } from "@orquestra/core";
 export type { MacroDefinition, ModuleDefinition } from "@orquestra/core";
 export type { OrquestraArtifact, ArtifactFeature, ArtifactScenario } from "@orquestra/core";
+export type { ArtifactAttachment, ArtifactLog, AttachmentInput, AttachmentType } from "@orquestra/core";
 export type { OrquestraConfig, GlobalOrquestraOptions, WorkerOrquestraOptions } from "@orquestra/core";
 ```
 
@@ -138,6 +155,165 @@ scenario.then("returns the user", (ctx) => {
 
 The takeaway: pick the matcher style your team likes, keep it consistent,
 and don't expect Orquestra to own this part of the stack.
+
+---
+
+## Attachments & logs — `attach` / `log`
+
+Some checks can't be expressed as a strict `assert`: an AI agent's text
+reply, a complex JSON response a PM wants to eyeball, a screenshot from a
+browser test. For those, Orquestra ships two top-level helpers that bind
+arbitrary content to the **currently-running step** and emit it into
+`artifact.json` (or, for binaries / oversized payloads, a sibling file
+under `outputDir/attachments/`).
+
+```ts
+import { attach, log } from "@orquestra/core";
+
+feature.scenario("recommends 3 products based on user history")
+  .given("a user with purchase history", async () => {
+    const user = await seed.userWithPurchases(["camera", "lens"]);
+    return { user };
+  })
+  .when("user asks for recommendations", async ({ user }) => {
+    const response = await ai.chat({ user: user.id, prompt: "What should I buy next?" });
+
+    attach({ name: "Prompt", type: "text", data: "What should I buy next?" });
+    attach({ name: "AI response", type: "markdown", data: response.text });
+    attach({ name: "Tool calls", type: "json", data: response.toolCalls });
+    log("model", response.model);
+    log("token_cost", response.usage);
+
+    return { response };
+  })
+  .then("called the right MCP tool", ({ response }) => {
+    strictEqual(response.toolCalls[0].name, "search_products");
+  });
+```
+
+### When to use which
+
+- **`attach({ name, type, data })`** — content the reader will *open and
+  read*: free-form text, markdown, JSON trees, screenshots, file dumps.
+- **`log(label, value)`** — small key/value pair the UI can *filter,
+  group or chart*: model name, token cost, latency, classification label.
+
+### Supported types
+
+| `type`     | `data` shape                          | Storage                                   |
+| ---------- | ------------------------------------- | ----------------------------------------- |
+| `text`     | `string`                              | inline if ≤ `inlineThresholdBytes`, else file |
+| `markdown` | `string`                              | inline if ≤ `inlineThresholdBytes`, else file |
+| `json`     | any JSON-serializable value           | inline if ≤ `inlineThresholdBytes`, else file |
+| `image`    | `Buffer` / `Uint8Array` (+ `mimeType`) | always file (`outputDir/attachments/...`) |
+| `file`     | `Buffer` / `Uint8Array` (+ `mimeType`) | always file (`outputDir/attachments/...`) |
+
+Spilled attachments are referenced by relative path on the
+`ArtifactStep`, e.g. `attachments/<scenarioId>/0-AI_response.md`. Inline
+attachments carry the payload directly on `step.attachments[i].inline`.
+
+Configure the threshold in `defineConfig`:
+
+```ts
+export default defineConfig({
+  inlineThresholdBytes: 100_000, // default: 51_200 (50 KB)
+});
+```
+
+### Use cases
+
+- **AI / LLM validation** — the canonical case. Free-form text answers
+  are rarely 100% assertable; PM reads the markdown, marks
+  approved/reproved.
+- **HTTP payload inspection** — `attach({ name: "Response body", type:
+  "json", data: response.body })` — useful when a strict deep-equal
+  against a literal payload is too brittle.
+- **Browser tests** — `attach({ name: "Final screenshot", type: "image",
+  data: await page.screenshot(), mimeType: "image/png" })`.
+- **Diagnostic dumps on failure** — log model versions, token costs and
+  latency so failed runs explain themselves without a re-run.
+
+### Rules of use (read this)
+
+`attach` and `log` are bound to the **currently-running step** by a
+module-level singleton that the BDD runner sets at the start of each step
+and clears in `finally`. This works only because each Orquestra worker
+runs **one scenario at a time, sequentially**, in its own isolated
+process — there is never more than one active step in the same memory
+space. The runner does not use `AsyncLocalStorage` here, so two rules
+apply:
+
+1. **Always `await` async work inside the step.** A fire-and-forget
+   promise that resolves *after* the step has returned will either:
+   - throw `attach() called after step "X" finished — likely a
+     fire-and-forget promise.` (when no other step has started yet — the
+     collector is frozen), or worse,
+   - silently anchor onto a *different* step if a new one has begun.
+
+   The framework cannot distinguish the second case from a legitimate
+   call. Discipline yourself: every async branch the step touches must
+   be awaited before the callback returns. Pair this with an ESLint rule
+   like `@typescript-eslint/no-floating-promises` if you want a static
+   guarantee.
+
+2. **`attach` / `log` only work *inside* a step callback.** Calling them
+   at module top level, in `beforeAll`, in plugin code that runs outside
+   a step, or in any of the lifecycle hooks
+   (`beforeStartServer`, `afterStartServer`, `beforeEachScenario`,
+   `afterEachScenario`, `beforeEachFeature`, `afterEachFeature`,
+   `beforeStopServer`) throws:
+   ```
+   Error: attach() must be called inside a step or hook callback
+   ```
+
+   Hook support is on the roadmap (the typical "DB snapshot on
+   `afterEachScenario` failure" use case), but is **not** in v3 — capture
+   diagnostics inside a step's callback for now.
+
+### Error messages you might see
+
+| Message                                                                                | Cause                                                                          |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `attach() must be called inside a step or hook callback`                               | Called from module scope, hook, or after the runner is done                    |
+| `attach() called after step "<id>" finished — likely a fire-and-forget promise.`       | An async branch leaked past the step boundary; `await` it inside the callback  |
+| `log() ...` (mirror of the above)                                                      | Same root cause as `attach()`                                                  |
+
+### Output shape
+
+`artifact.json` gains two optional fields per step:
+
+```ts
+interface ArtifactStep {
+  // ...existing keyword/name/status/durationMs/error...
+  attachments?: ArtifactAttachment[];
+  logs?: ArtifactLog[];
+}
+
+interface ArtifactAttachment {
+  name: string;
+  type: "text" | "markdown" | "json" | "image" | "file";
+  mimeType?: string;
+  bytes: number;
+  timestamp: string;          // ISO 8601 — set when `attach()` is called
+  inline?: string | unknown;  // present when small & non-binary
+  path?: string;              // present when spilled to disk (relative to outputDir)
+}
+
+interface ArtifactLog {
+  label: string;
+  value: unknown;
+  timestamp: string;          // ISO 8601 — set when `log()` is called
+}
+```
+
+Both `ArtifactAttachment` and `ArtifactLog` carry an ISO timestamp set at
+the moment the helper is called, so a viewer can interleave them in
+chronological order (useful when a step emits a mix of diagnostics
+across an async flow).
+
+The console reporter shows a compact `[N attachments, M logs]` suffix on
+each step that emits anything; richer rendering is left to custom
+reporters reading `artifact.json`.
 
 ---
 

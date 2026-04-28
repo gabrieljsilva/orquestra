@@ -1,6 +1,6 @@
 {
 	"name": "@orquestra/adapter-fastify",
-	"version": "2.1.0",
+	"version": "3.0.0",
 	"main": "dist/index.cjs.js",
 	"module": "dist/index.esm.js",
 	"license": "MIT",
@@ -28,12 +28,13 @@
 		"rimraf": "^6.0.1",
 		"rollup": "^4.19.0",
 		"tslib": "^2.6.3",
-		"typescript": "^5.5.3",
-		"@types/supertest": "^6.0.3"
+		"typescript": "^5.5.3"
 	},
 	"dependencies": {
-		"@orquestra/core": "^2.1.0",
-		"fastify": "^5.4.0"
+		"@orquestra/core": "^3.0.0",
+		"@types/supertest": "^6.0.3",
+		"fastify": "^5.4.0",
+		"supertest": "^6.3.4"
 	},
 	"peerDependencies": {
 		"fastify": "^5.4.0"

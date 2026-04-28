@@ -10,24 +10,19 @@ export default {
 			file: "dist/index.cjs.js",
 			format: "cjs",
 			sourcemap: false,
-			globals: {
-				"reflect-metadata": "Reflect",
-				express: "express",
-				"@orquestra/core": "OrquestraCore",
-			},
 		},
 		{
 			file: "dist/index.esm.js",
 			format: "es",
 			sourcemap: false,
-			globals: {
-				"reflect-metadata": "Reflect",
-				express: "express",
-				"@orquestra/core": "OrquestraCore",
-			},
 		},
 	],
-	external: ["express", "@orquestra/core", "reflect-metadata"],
+	// Keep all third-party dependencies external — the adapter is a thin
+	// glue layer (~50 lines), so bundling them just inflates the published
+	// tarball and breaks dedup with the consumer's installed copies.
+	// `supertest/lib/agent` is matched by a regex so the deep import is
+	// also externalized.
+	external: ["express", "@orquestra/core", "reflect-metadata", "supertest", /^supertest\//],
 	plugins: [
 		resolve({
 			preferBuiltins: true,

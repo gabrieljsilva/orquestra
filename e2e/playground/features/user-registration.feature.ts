@@ -1,6 +1,6 @@
 import { strictEqual } from "node:assert";
 import { faker } from "@faker-js/faker";
-import { orquestra } from "@orquestra/core";
+import { attach, log, orquestra } from "@orquestra/core";
 import { Factory } from "decorated-factory";
 import { UserEntity } from "../app";
 import { retryUntil } from "../app/utils";
@@ -26,7 +26,10 @@ feature
 		return { user };
 	})
 	.when('I send POST to "/users"', async ({ user }) => {
+		attach({ name: "Request payload", type: "json", data: user });
 		const response = await orquestra.http.post("/users").send(user);
+		attach({ name: "Response body", type: "json", data: response.body });
+		log("status_code", response.statusCode);
 		return { response };
 	})
 	.then("should return 200 with user data", ({ user, response }) => {
@@ -43,16 +46,19 @@ feature
 		return { user };
 	})
 	.when("I publish the user to the users queue", async ({ user }) => {
+		const queue = process.env.USERS_QUEUE as string;
+		const exchange = process.env.USERS_EXCHANGE as string;
+		log("queue", queue);
+		log("exchange", exchange);
+		attach({ name: "Published message", type: "json", data: user });
+
 		const rabbitmq = orquestra.get(TestRabbitmqService);
-		await rabbitmq.publishMessage({
-			queue: process.env.USERS_QUEUE as string,
-			exchange: process.env.USERS_EXCHANGE as string,
-			message: user,
-		});
+		await rabbitmq.publishMessage({ queue, exchange, message: user });
 	})
 	.then("the user should be persisted in the database", async ({ user }) => {
 		const auth = orquestra.get(TestAuthService);
 		const persisted = await retryUntil(() => auth.findUserByEmail(user.email), 5);
+		attach({ name: "Persisted user", type: "json", data: persisted });
 		strictEqual(persisted.email, user.email);
 		strictEqual(persisted.name, user.name);
 	});

@@ -87,5 +87,13 @@ export interface OrquestraConfig {
 
 	outputDir?: string;
 
+	/**
+	 * Maximum size in bytes for an attachment to be embedded inline in
+	 * `artifact.json`. Larger payloads (and any binary attachment) are
+	 * spilled to `outputDir/attachments/<scenarioId>/...` and referenced by
+	 * relative path. Default: 51200 (50KB).
+	 */
+	inlineThresholdBytes?: number;
+
 	logger?: Logger;
 }
