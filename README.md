@@ -204,8 +204,7 @@ useEnv({ JWT_SECRET: "old-secret-being-deprecated" });   // shorthand
 ```
 
 Setup hooks run **FIFO**, cleanup hooks **LIFO**. `process.env` is
-automatically restored between files. See [`lifecycle.md`](./lifecycle.md)
-for the full sequence diagram.
+automatically restored between files.
 
 Shared hooks fit naturally inside modules — declare them in `defineModule`
 and they're activated whenever the module is included:

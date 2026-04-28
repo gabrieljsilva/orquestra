@@ -51,8 +51,6 @@ worker shutdown:
   • exit
 ```
 
-See [`lifecycle.md`](../../lifecycle.md).
-
 ---
 
 ## Type generation

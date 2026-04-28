@@ -64,8 +64,6 @@ await worker.shutdown()
    └─ Phase 3 (async, reverse): beforeStopServer → macros.onTeardown → services.onTeardown → http close
 ```
 
-See [`lifecycle.md`](../../lifecycle.md) for the full sequence diagram.
-
 ### Reporters
 
 ```ts
