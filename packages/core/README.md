@@ -144,6 +144,57 @@ and don't expect Orquestra to own this part of the stack.
 
 ---
 
+## Running subprocesses from hooks
+
+Hooks frequently shell out — `prisma migrate deploy`, `redis-cli flushall`,
+`docker exec`, custom scripts. Orquestra hooks run in the **main Node
+process** (or in a worker, depending on scope), not under `pnpm`/`npm`.
+That has one consequence developers stumble into:
+
+> **`node_modules/.bin/` is NOT in `process.env.PATH`** when a hook calls
+> `child_process.execSync` / `spawn`.
+
+The hook itself can resolve a binary by absolute path. But if that binary
+**transitively spawns another tool by name** — and that tool only lives in
+`node_modules/.bin/` — the inner spawn fails with `ENOENT`. Classic
+example: `prisma db seed` resolves fine, but it then `spawn("ts-node", ...)`
+which is not in PATH.
+
+Three patterns that work:
+
+1. **Absolute paths or `pnpm`-prefixed commands**:
+   ```ts
+   execSync("./node_modules/.bin/prisma migrate deploy", { ... });
+   ```
+
+2. **Patch the `PATH` for the subprocess**:
+   ```ts
+   import path from "node:path";
+
+   const env = {
+     ...process.env,
+     PATH: `${path.resolve("node_modules/.bin")}${path.delimiter}${process.env.PATH}`,
+   };
+   execSync("prisma db seed", { env });
+   ```
+
+3. **Skip the subprocess entirely** when you control both ends. Orquestra
+   already loads TypeScript via jiti — importing your seed/setup code
+   directly is faster, debuggable, and dependency-free:
+   ```ts
+   import { runSeeds } from "src/infra/database/prisma/seeds";
+
+   afterProvision: async (ctx) => {
+     await runSeeds({ databaseUrl: templateUrl });
+   }
+   ```
+
+Pattern 3 is the most enterprise-grade: zero PATH magic, zero extra
+processes, and a step in your seed becomes a stoppable breakpoint inside
+the same `--debug` session as the rest of the suite.
+
+---
+
 ## Library mode
 
 You can use `WorkerOrquestra` directly without the runner — useful for

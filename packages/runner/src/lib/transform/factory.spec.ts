@@ -1,7 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createOrquestraJiti } from "./factory";
+import ts from "typescript";
+import { buildCacheBucket, createOrquestraJiti } from "./factory";
+import type { ResolvedTsConfig } from "./tsconfig-resolver";
 import { TsConfigResolver } from "./tsconfig-resolver";
 
 describe("createOrquestraJiti", () => {
@@ -67,5 +69,67 @@ describe("createOrquestraJiti", () => {
 
 		expect(jiti).toBeDefined();
 		expect(typeof jiti.import).toBe("function");
+	});
+});
+
+describe("buildCacheBucket — invalidates fs cache when transpile-affecting config changes", () => {
+	const baseTsconfig: ResolvedTsConfig = {
+		experimentalDecorators: false,
+		emitDecoratorMetadata: false,
+		target: ts.ScriptTarget.ES2022,
+		baseUrl: "/project",
+		paths: { "src/*": ["src/*"] },
+	};
+
+	it("is deterministic — same inputs always produce the same bucket id", () => {
+		expect(buildCacheBucket(baseTsconfig, false)).toBe(buildCacheBucket(baseTsconfig, false));
+	});
+
+	it("changes when target changes (different JS output)", () => {
+		const a = buildCacheBucket(baseTsconfig, false);
+		const b = buildCacheBucket({ ...baseTsconfig, target: ts.ScriptTarget.ES2020 }, false);
+		expect(a).not.toBe(b);
+	});
+
+	it("changes when paths change (resolution layout differs)", () => {
+		const a = buildCacheBucket(baseTsconfig, false);
+		const b = buildCacheBucket({ ...baseTsconfig, paths: { "lib/*": ["lib/*"] } }, false);
+		expect(a).not.toBe(b);
+	});
+
+	it("changes when baseUrl changes", () => {
+		const a = buildCacheBucket(baseTsconfig, false);
+		const b = buildCacheBucket({ ...baseTsconfig, baseUrl: "/other" }, false);
+		expect(a).not.toBe(b);
+	});
+
+	it("changes when experimentalDecorators flips (output differs structurally)", () => {
+		const a = buildCacheBucket(baseTsconfig, false);
+		const b = buildCacheBucket({ ...baseTsconfig, experimentalDecorators: true }, false);
+		expect(a).not.toBe(b);
+	});
+
+	it("changes when emitDecoratorMetadata flips", () => {
+		const a = buildCacheBucket({ ...baseTsconfig, experimentalDecorators: true }, false);
+		const b = buildCacheBucket(
+			{ ...baseTsconfig, experimentalDecorators: true, emitDecoratorMetadata: true },
+			false,
+		);
+		expect(a).not.toBe(b);
+	});
+
+	it("changes when sourceMaps flips — debug runs MUST get a fresh bucket", () => {
+		const a = buildCacheBucket(baseTsconfig, false);
+		const b = buildCacheBucket(baseTsconfig, "inline");
+		expect(a).not.toBe(b);
+	});
+
+	it("returns a short hex digest (12 chars), safe for path concatenation", () => {
+		const bucket = buildCacheBucket(baseTsconfig, false);
+		expect(bucket).toMatch(/^[0-9a-f]{12}$/);
+	});
+
+	it("undefined sourceMaps and `false` are equivalent (default off)", () => {
+		expect(buildCacheBucket(baseTsconfig, undefined)).toBe(buildCacheBucket(baseTsconfig, false));
 	});
 });

@@ -6,6 +6,8 @@ try {
 
 import { defineCommand, runMain } from "citty";
 import { getRunnerVersion } from "./lib/artifact";
+import { cacheCommand } from "./lib/commands/cache.command";
+import { generateCommand } from "./lib/commands/generate.command";
 import { testCommand } from "./lib/commands/test.command";
 import { typesCommand } from "./lib/commands/types.command";
 
@@ -18,6 +20,8 @@ const main = defineCommand({
 	subCommands: {
 		test: testCommand,
 		types: typesCommand,
+		generate: generateCommand,
+		cache: cacheCommand,
 	},
 });
 

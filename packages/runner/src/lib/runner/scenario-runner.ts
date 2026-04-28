@@ -28,7 +28,9 @@ export async function runScenarioBody(
 ): Promise<ScenarioRunOutcome> {
 	const startedAt = performance.now();
 	try {
-		await withTimeout(() => Promise.resolve(body()), timeoutMs, label);
+		await withTimeout(() => Promise.resolve(body()), timeoutMs, label, {
+			tuneKnob: "scenarioTimeoutMs (or per-feature/per-scenario `timeoutMs`)",
+		});
 		return { error: null, durationMs: Math.round(performance.now() - startedAt) };
 	} catch (err: any) {
 		const isTimeout = err instanceof TimeoutError;

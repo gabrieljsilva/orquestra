@@ -41,6 +41,12 @@ export const testCommand = defineCommand({
 			type: "string",
 			description: "Per-feature timeout in ms (kills worker if exceeded). Defaults to 5x hook timeout.",
 		},
+		debug: {
+			type: "boolean",
+			description:
+				"Run a single worker with --inspect-brk and inline source maps. Forces concurrency=1.",
+			default: false,
+		},
 		filter: {
 			type: "positional",
 			description: "Filter features by name",
@@ -74,11 +80,28 @@ export const testCommand = defineCommand({
 		const collectionMs = collection.totalMs;
 
 		if (featureFiles.length === 0) {
-			console.log("[orquestra] no feature files found");
+			const patterns = config.testMatch ?? ["**/*.feature.ts"];
+			console.log(
+				`[orquestra] no feature files found.\n` +
+					`            cwd:      ${configDir}\n` +
+					`            patterns: ${JSON.stringify(patterns)}` +
+					(args.filter ? `\n            filter:   ${JSON.stringify(args.filter)}` : "") +
+					`\n            Hint: testMatch globs are resolved relative to the config directory; ` +
+					`paths starting with "/" are treated as absolute.`,
+			);
 			return;
 		}
 
-		const concurrency = args.concurrency ? Number.parseInt(args.concurrency, 10) : config.concurrency ?? 1;
+		const debug = args.debug;
+		// Debug mode forces a single worker — inspecting parallel forks creates
+		// a port-pick-and-attach mess. The breakpoint experience needs to be
+		// deterministic, so we make the call here instead of letting the user
+		// shoot themselves in the foot.
+		const requestedConcurrency = args.concurrency ? Number.parseInt(args.concurrency, 10) : config.concurrency ?? 1;
+		const concurrency = debug ? 1 : requestedConcurrency;
+		if (debug && requestedConcurrency !== 1) {
+			console.log(`[orquestra] --debug: forcing concurrency=1 (was ${requestedConcurrency}).`);
+		}
 		const stopOnFail = args.stopOnFail;
 		// 5x the slowest of the configured per-call budgets gives the manager a
 		// safe upper bound for the wall-clock of a whole feature file.
@@ -105,6 +128,7 @@ export const testCommand = defineCommand({
 			tsconfigPath,
 			featureTimeoutMs,
 			workerMemoryLimitMb,
+			debug,
 			collectionMs,
 			collection,
 		});

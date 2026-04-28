@@ -55,9 +55,11 @@ function loadSwc(): SwcModule {
 
 export class OrquestraTransformer {
 	private readonly tsconfig: ResolvedTsConfig;
+	private readonly sourceMaps: boolean | "inline";
 
-	constructor(tsconfig: ResolvedTsConfig) {
+	constructor(tsconfig: ResolvedTsConfig, options: { sourceMaps?: boolean | "inline" } = {}) {
 		this.tsconfig = tsconfig;
+		this.sourceMaps = options.sourceMaps ?? false;
 	}
 
 	// SWC errors propagate so jiti surfaces them with file context instead of
@@ -68,7 +70,11 @@ export class OrquestraTransformer {
 
 		const result = swc.transformSync(opts.source, {
 			filename,
-			sourceMaps: false,
+			// Inline source maps embed a base64 .map at the bottom of the
+			// emitted JS — V8 picks them up automatically when --enable-source-maps
+			// is on, so breakpoints in .ts land on the right line. Off by default
+			// to keep the jiti cache lean.
+			sourceMaps: this.sourceMaps,
 			jsc: {
 				parser: {
 					syntax: "typescript",

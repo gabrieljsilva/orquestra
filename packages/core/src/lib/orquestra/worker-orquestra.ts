@@ -188,7 +188,9 @@ export class WorkerOrquestra {
 		const failures: HookFailure[] = [];
 		const isCleanup = order === "LIFO";
 
-		const timeoutMs = SERVER_HOOK_KINDS.has(kind) ? this.serverHookTimeoutMs : this.eachHookTimeoutMs;
+		const isServerHook = SERVER_HOOK_KINDS.has(kind);
+		const timeoutMs = isServerHook ? this.serverHookTimeoutMs : this.eachHookTimeoutMs;
+		const tuneKnob = isServerHook ? "serverHookTimeoutMs" : "eachHookTimeoutMs";
 
 		for (const hook of sequence) {
 			// Build a fresh ctx per hook so a hook that closes the http server
@@ -197,7 +199,7 @@ export class WorkerOrquestra {
 			const ctx = this.buildHookContext();
 			const startedAt = performance.now();
 			try {
-				await withTimeout(() => Promise.resolve(hook(ctx)), timeoutMs, `hook ${kind}`);
+				await withTimeout(() => Promise.resolve(hook(ctx)), timeoutMs, `hook ${kind}`, { tuneKnob });
 			} catch (err: any) {
 				const failure: HookFailure = {
 					hookName: kind,

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Feature, HookFailure, Scenario, StepEvent, WorkerOrquestra } from "@orquestra/core";
-import { initOrquestra, resetOrquestraInstance } from "@orquestra/core";
+import { BddRunner, initOrquestra, resetOrquestraInstance } from "@orquestra/core";
 import { loadConfig } from "./lib/loaders/config.loader";
 import { configToWorkerOrquestraOptions } from "./lib/runner/config-mapper";
 import type { MainToWorkerMessage, WorkerToMainMessage } from "./lib/runner/ipc-protocol";
@@ -51,10 +51,20 @@ async function main() {
 
 	const { config, configDir } = await loadConfig(configPath, { tsconfigPath });
 
+	const debugMode = process.env.ORQUESTRA_DEBUG === "1";
 	const jiti = createOrquestraJiti({
 		id: import.meta.url,
 		cwd: configDir,
 		tsconfigPath,
+		// In debug runs we want breakpoints in .ts to land. Inline source maps
+		// piggy-back on V8's --enable-source-maps without writing extra files.
+		sourceMaps: debugMode ? "inline" : false,
+		// The fs cache is keyed by source-content hash and ignores transform
+		// options, so a previous non-debug run would happily serve us cached
+		// JS *without* the source map embedded — and breakpoints would land
+		// on the compiled output instead of the .ts. Disable the cache for
+		// debug runs to force a fresh transpile (with the inline map).
+		fsCache: !debugMode,
 	});
 
 	const envSnapshot = snapshotEnv();
@@ -279,7 +289,11 @@ async function executeFeature(orq: WorkerOrquestra, feature: Feature, defaultTim
 			let scenarioOutcome: { error: { message: string; stack?: string } | null } = { error: null };
 			if (beforeFailures.length === 0) {
 				const timeoutMs = resolveScenarioTimeout(defaultTimeoutMs, feature.timeoutMs, scenario.timeoutMs);
-				scenarioOutcome = await runScenarioBody(label, () => feature.withRegistry(() => scenario.runAllSteps()), timeoutMs);
+				scenarioOutcome = await runScenarioBody(
+					label,
+					() => feature.withRegistry(() => BddRunner.runScenario(scenario)),
+					timeoutMs,
+				);
 			}
 
 			// afterEachScenario runs even if the body timed out or threw — same

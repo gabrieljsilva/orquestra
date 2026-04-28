@@ -30,6 +30,19 @@ describe("withTimeout", () => {
 		}
 	});
 
+	it("TimeoutError message points at the tune knob when provided", async () => {
+		const never = new Promise<never>(() => {});
+		try {
+			await withTimeout(never, 3, "scenario body", { tuneKnob: "scenarioTimeoutMs" });
+			throw new Error("should have thrown");
+		} catch (err) {
+			const t = err as TimeoutError;
+			expect(t.tuneKnob).toBe("scenarioTimeoutMs");
+			expect(t.message).toContain("scenarioTimeoutMs");
+			expect(t.message).toContain("raise");
+		}
+	});
+
 	it("preserves the original rejection when work fails before timeout", async () => {
 		const failing = Promise.reject(new Error("boom"));
 		await expect(withTimeout(failing, 100, "test")).rejects.toThrow("boom");

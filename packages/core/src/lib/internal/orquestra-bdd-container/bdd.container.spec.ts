@@ -85,3 +85,52 @@ describe("Feature.withRegistry / scenario registration", () => {
 		expect(features).toHaveLength(1);
 	});
 });
+
+describe("Feature.timeoutMs / Scenario.timeoutMs (V3 timeout overrides)", () => {
+	it("Feature.timeoutMs is undefined when not declared (caller falls back to config default)", () => {
+		const container = new BddContainer();
+		const feature = container.define("plain", { as: "u", I: "i", so: "s" } as any);
+		expect(feature.timeoutMs).toBeUndefined();
+	});
+
+	it("Feature.timeoutMs reflects the value passed in the FeatureDefinition", () => {
+		const container = new BddContainer();
+		const feature = container.define("slow", {
+			as: "u",
+			I: "i",
+			so: "s",
+			timeoutMs: 30_000,
+		} as any);
+		expect(feature.timeoutMs).toBe(30_000);
+	});
+
+	it("Scenario without options carries no timeoutMs override", () => {
+		const container = new BddContainer();
+		const feature = container.define("no-override", { as: "u", I: "i", so: "s" } as any);
+		const scenario = feature.scenario("normal");
+		expect(scenario.timeoutMs).toBeUndefined();
+	});
+
+	it("Scenario(name, { timeoutMs }) records the per-scenario override", () => {
+		const container = new BddContainer();
+		const feature = container.define("with-override", { as: "u", I: "i", so: "s" } as any);
+		const scenario = feature.scenario("regression: heavy report", { timeoutMs: 60_000 });
+		expect(scenario.timeoutMs).toBe(60_000);
+	});
+
+	it("Per-scenario timeoutMs is independent from the feature-level value", () => {
+		const container = new BddContainer();
+		const feature = container.define("mixed", {
+			as: "u",
+			I: "i",
+			so: "s",
+			timeoutMs: 10_000,
+		} as any);
+		const fast = feature.scenario("fast");
+		const slow = feature.scenario("slow", { timeoutMs: 90_000 });
+
+		expect(fast.timeoutMs).toBeUndefined(); // caller resolves it from feature
+		expect(slow.timeoutMs).toBe(90_000);
+		expect(feature.timeoutMs).toBe(10_000);
+	});
+});

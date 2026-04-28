@@ -28,6 +28,8 @@ export interface ParallelRunnerOptions {
 	featureTimeoutMs?: number;
 	/** Soft memory cap (MB). Recycles a worker after a feature finishes if its heap exceeds this. */
 	workerMemoryLimitMb?: number;
+	/** Debug mode: force concurrency=1, emit source maps, fork worker with --inspect-brk. */
+	debug?: boolean;
 	/** Time spent before the runner — discovery, loadConfig, loadSpec, jiti warmup. */
 	collectionMs?: number;
 	/** Per-step breakdown of `collectionMs`, for performance debugging. */
@@ -131,6 +133,7 @@ export class ParallelRunner {
 				tsconfigPath: this.options.tsconfigPath,
 				featureTimeoutMs: this.options.featureTimeoutMs,
 				workerMemoryLimitMb: this.options.workerMemoryLimitMb,
+				debug: this.options.debug,
 			});
 			workerResult = await manager.run();
 		} finally {

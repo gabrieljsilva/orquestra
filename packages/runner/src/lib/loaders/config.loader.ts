@@ -50,7 +50,7 @@ export async function loadConfig(configPath?: string, options: LoadConfigOptions
 	};
 }
 
-function validateConfig(config: unknown): asserts config is OrquestraConfig {
+export function validateConfig(config: unknown): asserts config is OrquestraConfig {
 	if (!config || typeof config !== "object") {
 		throw new Error("Config must export an object. Use defineConfig() for type safety.");
 	}

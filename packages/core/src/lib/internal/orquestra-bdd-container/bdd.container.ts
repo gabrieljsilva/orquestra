@@ -3,7 +3,6 @@ import type { FeatureDefinition, ScenarioOptions } from "../../types/bdd";
 import type { StepEvent } from "../../types/events";
 import type { RegistryMacroContext, RegistryMacroTitle } from "../../types/registry";
 import type { FeatureMeta } from "../../types/reporting";
-import { BddRunner } from "./bdd.runner";
 
 export enum StepKind {
 	GIVEN = "GIVEN",
@@ -131,9 +130,6 @@ export class Scenario<C extends object = {}> {
 		});
 	}
 
-	async runAllSteps(initialCtx: Partial<C> = {} as Partial<C>): Promise<C> {
-		return (await BddRunner.runScenario(this as any, initialCtx as any)) as C;
-	}
 }
 
 export class Feature {

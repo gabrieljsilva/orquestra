@@ -23,6 +23,13 @@ export interface WorkerManagerOptions {
 	 * disables recycling (no overhead in that case).
 	 */
 	workerMemoryLimitMb?: number;
+	/**
+	 * Debug mode: workers are forked with `--inspect-brk=0` (auto port,
+	 * pauses before user code), source maps are emitted by the transpiler,
+	 * and `ORQUESTRA_DEBUG=1` is exported into the worker env. Enable via
+	 * `--debug` on the CLI; expects concurrency=1 to be sane.
+	 */
+	debug?: boolean;
 }
 
 export interface WorkerManagerResult {
@@ -163,15 +170,47 @@ export class WorkerManager {
 		return resolve(__dirname, "worker.cjs.js");
 	}
 
+	private isIdeAutoAttachActive(): boolean {
+		return ideAutoAttachActive(process.env.NODE_OPTIONS);
+	}
+
+	private buildExecArgv(): string[] {
+		return resolveExecArgv({
+			debug: !!this.options.debug,
+			parentExecArgv: process.execArgv,
+			parentNodeOptions: process.env.NODE_OPTIONS,
+		});
+	}
+
 	private spawnWorker(id: number, workerScript: string): void {
 		const args = [this.options.configPath, String(id)];
 		if (this.options.tsconfigPath) args.push(this.options.tsconfigPath);
 
+		const execArgv = this.buildExecArgv();
 		const child = fork(workerScript, args, {
 			stdio: ["ignore", "inherit", "inherit", "ipc"],
-			env: { ...process.env, ORQUESTRA_WORKER_ID: String(id) },
-			execArgv: ["--no-deprecation"],
+			env: {
+				...process.env,
+				ORQUESTRA_WORKER_ID: String(id),
+				...(this.options.debug ? { ORQUESTRA_DEBUG: "1" } : {}),
+			},
+			execArgv,
 		});
+
+		if (this.options.debug) {
+			if (this.isIdeAutoAttachActive()) {
+				console.log(
+					`[orquestra] worker ${id} spawned in debug mode — IDE auto-attach detected (Cursor/VS Code).\n` +
+						`[orquestra] Set breakpoints in your .feature.ts and the worker will pause when it reaches them.`,
+				);
+			} else {
+				console.log(
+					`[orquestra] worker ${id} spawned in debug mode — waiting for inspector to attach.\n` +
+						`[orquestra] Look for the "Debugger listening on ws://..." line above and attach VS Code (F5),\n` +
+						`[orquestra] WebStorm (Run › Attach to Node.js/Chrome), or visit chrome://inspect.`,
+				);
+			}
+		}
 
 		const slot: WorkerSlot = {
 			id,
@@ -232,7 +271,14 @@ export class WorkerManager {
 		if (!timeout || timeout <= 0) return;
 		slot.featureTimer = setTimeout(() => {
 			if (!slot.alive || slot.currentFile !== file) return;
-			console.error(`[orquestra] worker ${slot.id} exceeded ${timeout}ms on "${file}" — killing`);
+			console.error(
+				`[orquestra] worker ${slot.id} exceeded ${timeout}ms on "${file}" — sending SIGKILL.\n` +
+					`            This is the last-resort feature-level timeout: per-scenario teardown ` +
+					`(afterEachScenario, beforeStopServer, services.onTeardown) will NOT run for this file.\n` +
+					`            Containers stay safe — they are torn down by global deprovision at the end ` +
+					`of the run. If a hook genuinely needs more time, raise scenarioTimeoutMs / ` +
+					`eachHookTimeoutMs / serverHookTimeoutMs first; only raise --featureTimeout if those don't fit.`,
+			);
 			this.failedFiles.add(file);
 			this.crashed = true;
 			try {
@@ -310,17 +356,20 @@ export class WorkerManager {
 	}
 
 	private maybeRecycleForMemory(slot: WorkerSlot, heapUsedBytes: number | undefined): void {
-		const limitMb = this.options.workerMemoryLimitMb;
-		if (!limitMb || limitMb <= 0) return;
-		if (heapUsedBytes === undefined) return;
-		if (this.shuttingDown || slot.recyclePending) return;
-		if (this.queue.length === 0) return;
-
-		const heapMb = heapUsedBytes / (1024 * 1024);
-		if (heapMb < limitMb) return;
+		const decision = shouldRecycleWorker({
+			heapUsedBytes,
+			limitMb: this.options.workerMemoryLimitMb,
+			queueLength: this.queue.length,
+			shuttingDown: this.shuttingDown,
+			recyclePending: slot.recyclePending,
+		});
+		if (!decision) return;
 
 		slot.recyclePending = true;
-		console.log(`[orquestra] worker ${slot.id} recycling — heap ${heapMb.toFixed(0)}MB ≥ limit ${limitMb}MB`);
+		const heapMb = (heapUsedBytes as number) / (1024 * 1024);
+		console.log(
+			`[orquestra] worker ${slot.id} recycling — heap ${heapMb.toFixed(0)}MB ≥ limit ${this.options.workerMemoryLimitMb}MB`,
+		);
 		this.send(slot, { type: "shutdown" });
 	}
 
@@ -332,4 +381,78 @@ export class WorkerManager {
 			slot.alive = false;
 		}
 	}
+}
+
+/* ------------------------------------------------------------------------ */
+/*  Pure helpers — exported for unit testing without spawning real forks.   */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * VS Code / Cursor auto-attach injects `--inspect-publish-uid=http` into
+ * `NODE_OPTIONS` so each subprocess publishes its inspector URL to a local
+ * HTTP server the IDE discovers. Detect that signal so we don't inject our
+ * own `--inspect-brk` and create a race with the IDE's wiring.
+ */
+export function ideAutoAttachActive(nodeOptions: string | undefined): boolean {
+	if (!nodeOptions) return false;
+	return nodeOptions.includes("--inspect-publish-uid");
+}
+
+export interface ResolveExecArgvInput {
+	debug: boolean;
+	/** Parent process's `execArgv` — we may need to herd `--inspect*` flags into the fork. */
+	parentExecArgv: ReadonlyArray<string>;
+	/** Parent process's `NODE_OPTIONS` — used only to detect IDE auto-attach. */
+	parentNodeOptions: string | undefined;
+}
+
+/**
+ * Computes the `execArgv` to pass to `fork()` for a worker. Pure function so
+ * unit tests can exercise every branch without spawning child processes.
+ *
+ * - Debug + IDE auto-attach detected: only `--enable-source-maps` (the IDE
+ *   wires the inspector via inherited NODE_OPTIONS).
+ * - Debug + standalone terminal: `--inspect-brk=0` so the worker pauses
+ *   before user code, giving the dev time to attach.
+ * - Non-debug + parent has `--inspect*`: forward those flags so
+ *   `node --inspect node_modules/.bin/orquestra` keeps working.
+ * - Non-debug + nothing special: just `--no-deprecation`.
+ */
+export function resolveExecArgv(input: ResolveExecArgvInput): string[] {
+	const base = ["--no-deprecation"];
+
+	if (input.debug) {
+		const sourceMaps = "--enable-source-maps";
+		if (ideAutoAttachActive(input.parentNodeOptions)) {
+			return [sourceMaps, ...base];
+		}
+		return ["--inspect-brk=0", sourceMaps, ...base];
+	}
+
+	const parentInspect = input.parentExecArgv.filter((a) => a.startsWith("--inspect"));
+	return [...parentInspect, ...base];
+}
+
+export interface ShouldRecycleWorkerInput {
+	heapUsedBytes: number | undefined;
+	limitMb: number | undefined;
+	queueLength: number;
+	shuttingDown: boolean;
+	recyclePending: boolean;
+}
+
+/**
+ * Decides if the manager should recycle a worker after a feature finishes.
+ * Pure function — easy to unit-test every branch.
+ *
+ * Returns `false` when the limit is unset (defense in depth: the no-recycle
+ * code path is byte-identical to legacy behavior, no overhead).
+ */
+export function shouldRecycleWorker(input: ShouldRecycleWorkerInput): boolean {
+	if (!input.limitMb || input.limitMb <= 0) return false;
+	if (input.heapUsedBytes === undefined) return false;
+	if (input.shuttingDown || input.recyclePending) return false;
+	if (input.queueLength === 0) return false;
+	const heapMb = input.heapUsedBytes / (1024 * 1024);
+	return heapMb >= input.limitMb;
 }

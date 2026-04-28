@@ -78,7 +78,9 @@ export class GlobalOrquestra {
 		for (const fn of fns) {
 			const ctx = this.buildHookContext();
 			try {
-				await withTimeout(() => Promise.resolve(fn(ctx)), this.hookTimeoutMs, `global hook ${kind}`);
+				await withTimeout(() => Promise.resolve(fn(ctx)), this.hookTimeoutMs, `global hook ${kind}`, {
+					tuneKnob: "serverHookTimeoutMs",
+				});
 			} catch (err: any) {
 				const msg = `[orquestra] global hook ${kind} failed: ${err?.message ?? err}`;
 				if (abortOnFail) {

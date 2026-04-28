@@ -10,8 +10,10 @@ For migration from v2.x, see [`MIGRATION.md`](../../MIGRATION.md).
 ## CLI
 
 ```bash
-npx orquestra test [--config <path>] [--concurrency <n>] [--stopOnFail] [<filter>]
-npx orquestra types [--config <path>]
+npx orquestra test     [--config <path>] [--concurrency <n>] [--stopOnFail] [--debug] [<filter>]
+npx orquestra types    [--config <path>]
+npx orquestra generate debug [--ide=vscode|webstorm|all] [--force] [--print]
+npx orquestra cache    clear [--dry-run]
 ```
 
 - `test` — discovers feature files via `testMatch`, runs them in parallel
@@ -20,6 +22,12 @@ npx orquestra types [--config <path>]
 - `types` — generates `.orquestra/orquestra.d.ts` augmenting
   `OrquestraRegistry` with personas, domains and macro titles. Run after
   changing macros to keep `.given("title")` autocomplete in sync.
+- `generate debug` — writes IDE launch configurations that invoke
+  `orquestra test --debug` for you. See [Debugging](#debugging) below.
+- `cache clear` — wipes the SWC transpile cache (`node_modules/.cache/jiti`).
+  Rarely needed since the cache key already factors in the relevant
+  `tsconfig.json` fields, but useful when forcing a fresh build for
+  diagnostics. `--dry-run` prints what would be removed.
 
 The runner uses `ParallelRunner` regardless of concurrency — `concurrency=1`
 just spawns a single worker.
@@ -166,3 +174,82 @@ testcontainers (`Postgres`, `RabbitMQ`, `Keycloak`, …) declared in
 
 The time budget for each global hook is `serverHookTimeoutMs` (default
 60000ms) — same as worker server-lifecycle hooks. Override via that field.
+
+---
+
+## Debugging
+
+Setting breakpoints in `.feature.ts` works through three layers, ordered
+from least to most setup. Pick the first one that fits and stop there.
+
+### Layer 1 — `--debug` flag
+
+```bash
+npx orquestra test --debug
+```
+
+Effects:
+
+- Forces `concurrency=1`. Debugging parallel forks means picking ports and
+  attaching N times — not worth the friction. The flag prints a notice if
+  it overrides a higher concurrency from your config.
+- Forks the worker with `--inspect-brk=0` (auto port). The worker pauses
+  before user code so the inspector can attach in time. Look for
+  `Debugger listening on ws://...` in the output.
+- Emits inline source maps from the SWC transformer and forwards
+  `--enable-source-maps` to the worker. V8 resolves breakpoints from `.ts`
+  to the right line.
+- Sets `ORQUESTRA_DEBUG=1` inside the worker so the jiti instance opts in
+  to source maps automatically.
+
+After the worker prints the inspector URL, attach from any debugger:
+
+- Chrome: `chrome://inspect` auto-discovers the target.
+- VS Code: `Run › Attach to Node Process`.
+- WebStorm: `Run › Attach to Node.js/Chrome`.
+
+### Layer 2 — `orquestra generate debug`
+
+Generates a launch configuration for your IDE so you press a single button
+instead of remembering flags.
+
+```bash
+npx orquestra generate debug                # auto-detects (.vscode/ vs .idea/)
+npx orquestra generate debug --ide=vscode   # explicit
+npx orquestra generate debug --ide=webstorm
+npx orquestra generate debug --ide=all      # both
+npx orquestra generate debug --print        # stdout, no write
+npx orquestra generate debug --force        # overwrite existing files
+```
+
+For VS Code (`.vscode/launch.json`), two configurations are added:
+- **Orquestra: debug all features** — runs the whole suite under `--debug`.
+- **Orquestra: debug current feature** — filters by the basename of the
+  open editor file (`${fileBasenameNoExtension}`). Open a `.feature.ts`,
+  press F5, breakpoints inside that file's steps fire.
+
+If `.vscode/launch.json` already exists, the merge is by configuration
+name: existing configurations are preserved, ours are added or replaced
+in place. Comments in the original file are not preserved on merge — use
+`--print` and integrate by hand if you need to keep them.
+
+For WebStorm/JetBrains (`.idea/runConfigurations/*.xml`), each
+configuration is a separate file (the JetBrains convention). Re-running
+the generator overwrites the same files; no merge needed. Pass `--force`
+if you've customized one and want it replaced.
+
+### Layer 3 — Manual `node --inspect-brk` invocation
+
+If you want full control or your editor isn't covered by `generate debug`,
+invoking node directly works as long as the parent already has `--inspect*`
+in its `execArgv`:
+
+```bash
+node --inspect-brk node_modules/.bin/orquestra test --concurrency=1
+```
+
+The worker manager filters `--inspect*` flags out of the parent's
+`execArgv` and forwards them to each fork (with the auto-incremented port
+node assigns), so breakpoints work without `--debug`. Source maps are
+**not** emitted in this path — flip that on by also passing `--debug`, or
+set `ORQUESTRA_DEBUG=1` in the env yourself.
