@@ -219,6 +219,175 @@ export const isolationModule = defineModule({
 
 ---
 
+## Global hooks (config-time)
+
+Run **once per run, in the main process**, around container provisioning.
+Useful for one-time setup that every worker depends on — building a Postgres
+template database, importing a Keycloak realm, seeding Redis fixtures.
+
+```typescript
+export default defineConfig({
+  global: {
+    containers: [postgres, keycloak, rabbit],
+
+    afterProvision: async (ctx) => {
+      const pg = ctx.container.get(Postgres);
+      await pg.query("CREATE DATABASE test_template");
+      await runMigrations(pg, "test_template");
+      await runSeeds(pg, "test_template");
+    },
+
+    beforeDeprovision: async (ctx) => {
+      // Optional: dump state for debugging when the run failed.
+    },
+  },
+  worker: { /* ... */ },
+});
+```
+
+| Hook                | Timing                                  | On failure          |
+| ------------------- | --------------------------------------- | ------------------- |
+| `beforeProvision`   | Before testcontainers come up           | aborts the run      |
+| `afterProvision`    | Containers up, before any worker forks  | aborts the run      |
+| `beforeDeprovision` | After workers exit, before teardown     | logs and continues  |
+| `afterDeprovision`  | After containers are gone               | logs and continues  |
+
+The `GlobalHookContext` is intentionally narrower than the worker
+`HookContext` — the main process never owns an HTTP server, each worker
+boots its own:
+
+| Field             | Worker `HookContext` | `GlobalHookContext` |
+| ----------------- | :------------------: | :-----------------: |
+| `ctx.env`         |          ✓           |          ✓          |
+| `ctx.container`   |          ✓           |     ✓ (global)      |
+| `ctx.get(Token)`  |          ✓           |     ✓ (global)      |
+| `ctx.http`        |          ✓           |       ✗ (n/a)       |
+
+`ctx.container` resolves to the **global IoC** — it sees testcontainers
+declared in `global.containers`, not worker-scoped services or macros.
+Each global hook is bounded by `serverHookTimeoutMs` (default 60s).
+
+### Why this matters: per-feature setup gets cheaper
+
+The textbook win for `afterProvision` is **schema-template provisioning**:
+
+1. `afterProvision`: `CREATE DATABASE test_template` + run migrations + seed
+   once. Pay 2–5s, total.
+2. Per-feature `beforeStartServer`: `CREATE DATABASE test_<id> WITH TEMPLATE
+   test_template` — copies pages directly, ~50–200ms instead of re-running
+   migrations every time.
+
+Same idea for Keycloak realm import (do once globally; workers just
+authenticate) and Redis fixtures (seed once; workers use a key prefix).
+
+---
+
+## Time budgets
+
+Three knobs cap how long each kind of work can run. Defaults are
+conservative and tunable:
+
+| Field                 | Default | Caps                                                                                                              |
+| --------------------- | ------: | ----------------------------------------------------------------------------------------------------------------- |
+| `scenarioTimeoutMs`   |   5000  | Body of each scenario.                                                                                            |
+| `eachHookTimeoutMs`   |  10000  | `before/afterEachScenario`, `before/afterEachFeature`.                                                            |
+| `serverHookTimeoutMs` |  60000  | `beforeStartServer`, `afterStartServer`, `beforeStopServer`, plus service `onStart`/`onTeardown` and global hooks. |
+
+```typescript
+defineConfig({
+  scenarioTimeoutMs: 5_000,
+  eachHookTimeoutMs: 10_000,
+  serverHookTimeoutMs: 60_000,
+  // ...
+});
+```
+
+The scenario budget can be overridden **per feature** (applies to every
+scenario in it) and **per scenario** (applies to that one alone).
+Resolution priority is **scenario > feature > config default**:
+
+```typescript
+const slowFeature = defineFeature("slow integration", {
+  as: "operator",
+  I: "want to run a long-ish scenario",
+  so: "...",
+  timeoutMs: 30_000,           // every scenario in this feature
+});
+
+slowFeature
+  .scenario("regression: heavy report", { timeoutMs: 60_000 })  // this one only
+  .given(...)
+  .when(...)
+  .then(...);
+```
+
+When a scenario body times out:
+- `afterEachScenario` still runs (per-scenario teardown gets its chance).
+- Sibling scenarios in the same feature continue normally.
+- The failure is recorded as a synthetic `<scenario body>` step in the
+  artifact, with the `TimeoutError` message pointing at the knob to tune.
+
+Setting any knob to `0` or `Infinity` disables that timeout. The CLI also
+exposes `--featureTimeout=N` (a manager-level last-resort kill, defaulting
+to `5 × max(serverHookTimeoutMs, eachHookTimeoutMs, scenarioTimeoutMs)`).
+
+---
+
+## Worker memory recycle (opt-in)
+
+Long-running workers (thousands of features, heavy user plugins, native
+bindings) can leak memory. Set `workerMemoryLimitMb` to recycle a worker
+after it crosses the threshold:
+
+```typescript
+defineConfig({
+  workerMemoryLimitMb: 512,   // soft cap (MB)
+  // ...
+});
+```
+
+When configured, the worker reports `heapUsed` after each feature; if it
+exceeds the limit and the queue still has work, the manager drains the
+worker gracefully (current feature finishes its teardown) and spawns a
+fresh one. Pending features are preserved — none lost, none duplicated.
+
+Leave it undefined to disable. The non-recycle code path is byte-identical
+to legacy behavior — no overhead in default runs.
+
+---
+
+## Debugging
+
+Set breakpoints in `.feature.ts` and run:
+
+```bash
+npx orquestra test --debug
+```
+
+Effects:
+- Forces `concurrency=1` (debugging parallel forks is unworkable).
+- Forks the worker with `--inspect-brk=0` + `--enable-source-maps`.
+- Emits inline source maps so V8 maps breakpoints back to `.ts`.
+- Detects VS Code/Cursor auto-attach and avoids racing with the IDE
+  bootloader.
+
+For zero-config IDE integration, generate launch configs:
+
+```bash
+npx orquestra generate debug                 # auto-detects .vscode/ vs .idea/
+npx orquestra generate debug --ide=vscode    # explicit
+npx orquestra generate debug --ide=webstorm
+npx orquestra generate debug --ide=all
+```
+
+Two configurations are generated per IDE: "debug all features" and "debug
+current feature" (filters by the basename of the file open in the editor).
+Press F5 from a `.feature.ts`, breakpoints fire. See the
+[`@orquestra/runner` README](./packages/runner/README.md#debugging) for
+details on the underlying mechanism and adding new IDE targets.
+
+---
+
 ## Key ideas
 
 - **Three files, three responsibilities**
@@ -243,14 +412,42 @@ export const isolationModule = defineModule({
   `OrquestraRegistry`. Enables autocomplete for personas/domains and type
   inference from macros.
 
+  TypeScript ignores files under dotfolders by default. Add the generated
+  declaration to your `tsconfig.json` so the IDE and `tsc` see it:
+
+  ```jsonc
+  {
+    "include": ["**/*.ts", ".orquestra/**/*.d.ts"]
+  }
+  ```
+
+  Without this, macro context inference (`.given("title")` returning the
+  right context) fails — it depends on `typeof <macroIdentifier>` resolving
+  through the TS server.
+
 - **Artifact-first reporting** — every run produces `artifact.json`. Build
   custom reporters on top of that schema.
 
 ---
 
-## Migrating from v2.x
+## Security: `artifact.json` may contain sensitive data
 
-v3 is a major breaking release. Read [`MIGRATION.md`](./MIGRATION.md).
+The runner serializes step and hook errors verbatim, including
+`error.message` and `error.stack`. In practice this means:
+
+- Absolute filesystem paths from worker stack traces (`/home/<user>/...`).
+- Content of any error message constructed by your code or your
+  dependencies. HTTP libraries (e.g. SuperTest) commonly echo
+  request/response headers in assertion failure messages, including
+  `Authorization` and `Cookie`.
+- Connection strings if a driver throws with the URL embedded.
+
+`artifact.json` is written under `outputDir` (defaults to `.orquestra/`)
+with the process's default umask. It is **not** redacted by Orquestra.
+
+Treat `artifact.json` as potentially sensitive. If you publish it as a
+public CI artifact (GitHub Actions artifact, build dashboard, etc.), scrub
+common header names beforehand or generate a separate sanitized export.
 
 ---
 

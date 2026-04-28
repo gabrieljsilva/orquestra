@@ -77,8 +77,8 @@
     depend on envs written by containers); services `onStart`/`onTeardown` are
     properly awaited.
 
-  **BREAKING CHANGES**. See `MIGRATION.md` at the repo root for a side-by-side
-  guide covering 16 areas of breaking changes.
+  **BREAKING CHANGES**. See the v2.0.0 GitHub release notes for the full
+  side-by-side guide.
 
 ## 1.0.0
 

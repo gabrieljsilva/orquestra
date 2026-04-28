@@ -3,7 +3,6 @@
 The BDD engine, IoC container and lifecycle primitives that power Orquestra.
 
 For the user-facing overview, see the [root README](../../README.md).
-For migration from v2.x, see [`MIGRATION.md`](../../MIGRATION.md).
 
 ---
 

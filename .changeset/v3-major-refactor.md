@@ -8,8 +8,10 @@
 # Orquestra v3.0 — major refactor
 
 Major breaking release focused on simplifying the public API and making the
-runtime deterministic. See [`MIGRATION.md`](../MIGRATION.md) for the
-side-by-side migration guide.
+runtime deterministic. The repo's [`README.md`](../README.md) covers the
+v3 surface (config shape, hooks, time budgets, debugging, security notes);
+release notes on GitHub will carry the full side-by-side breaking-change
+list when v3 ships.
 
 ## Highlights
 
@@ -71,5 +73,5 @@ that exclude — the TS server needs to see macro source files for context
 inference. Production builds typically use a separate `tsconfig.build.json`
 that keeps `__tests__/` excluded.
 
-See [`MIGRATION.md`](../MIGRATION.md) for the full breaking-change list and
-mechanical migration script.
+The full breaking-change list will live on the v3 GitHub release notes
+when v3 is published.

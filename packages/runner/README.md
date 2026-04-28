@@ -3,7 +3,6 @@
 CLI and test runner for the Orquestra platform.
 
 For the user-facing overview, see the [root README](../../README.md).
-For migration from v2.x, see [`MIGRATION.md`](../../MIGRATION.md).
 
 ---
 

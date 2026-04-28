@@ -4,7 +4,6 @@ Fastify HTTP adapter for Orquestra. Wraps a `FastifyInstance` and exposes a
 SuperTest agent through `orquestra.http`.
 
 For the user-facing overview, see the [root README](../../README.md).
-For migration from v2, see [`MIGRATION.md`](../../MIGRATION.md).
 
 ---
 
