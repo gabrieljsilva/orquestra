@@ -207,6 +207,9 @@ function buildPersonas(features: ArtifactFeature[]): ArtifactPersona[] {
 	const byPersona = new Map<string, string[]>();
 
 	for (const feature of features) {
+		// Features without persona narrative (e.g. unit tests via @orquestra/vitest)
+		// don't contribute to persona aggregation — persona is an E2E concept.
+		if (!feature.as) continue;
 		const list = byPersona.get(feature.as) ?? [];
 		list.push(feature.name);
 		byPersona.set(feature.as, list);

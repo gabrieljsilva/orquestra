@@ -140,6 +140,7 @@ export class Feature {
 	private readonly as: string;
 	private readonly I: string;
 	private readonly so: string;
+	private readonly hasNarrative: boolean;
 	readonly timeoutMs?: number;
 	private readonly scenarios: Array<Scenario<any>> = [];
 	private readonly registry: Map<string, Step<any, any>> = new Map();
@@ -151,10 +152,19 @@ export class Feature {
 		this.name = name;
 		this.context = definition.context;
 		this.domain = definition.domain;
-		this.as = definition.as;
-		this.I = definition.I;
-		this.so = definition.so;
+		// Default narrative fields to empty strings when omitted (code-first
+		// unit/integration features via @orquestra/vitest don't carry persona).
+		// `hasNarrative` lets reporters/generators know whether to skip the
+		// "As / I / So that" block in their output.
+		this.as = definition.as ?? "";
+		this.I = definition.I ?? "";
+		this.so = definition.so ?? "";
+		this.hasNarrative = definition.as !== undefined || definition.I !== undefined || definition.so !== undefined;
 		this.timeoutMs = definition.timeoutMs;
+	}
+
+	hasPersonaNarrative(): boolean {
+		return this.hasNarrative;
 	}
 
 	pushEvent(evt: StepEvent): void {

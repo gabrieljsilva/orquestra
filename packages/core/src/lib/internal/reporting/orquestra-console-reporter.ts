@@ -29,9 +29,12 @@ export class OrquestraConsoleReporter extends OrquestraReporter {
 	private printFeature(feature: ArtifactFeature): void {
 		console.log(c.bold(`Feature: ${feature.name}`));
 		if (feature.domain) console.log(c.dim(`  Domain: ${feature.domain}`));
-		console.log(`  As ${this.prefixArticle(feature.as)}`);
-		console.log(`  I ${feature.I}`);
-		console.log(`  So that ${feature.so}`);
+		const hasNarrative = !!(feature.as || feature.I || feature.so);
+		if (hasNarrative) {
+			console.log(`  As ${this.prefixArticle(feature.as)}`);
+			console.log(`  I ${feature.I}`);
+			console.log(`  So that ${feature.so}`);
+		}
 		console.log("");
 
 		if (feature.hookFailures && feature.hookFailures.length > 0) {
