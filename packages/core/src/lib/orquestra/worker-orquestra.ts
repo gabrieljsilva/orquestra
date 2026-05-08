@@ -217,13 +217,20 @@ export class WorkerOrquestra {
 	private buildMacroStep(kind: StepKind, title: string): Step<any, any> | undefined {
 		const macro = this.bootstrap.getMacroByTitle(title);
 		if (!macro) return undefined;
-		return new Step<any, any>(kind, title, async () => {
-			// Macros invoked by step title receive no input — the second argument
-			// of `defineMacro({ execute })` is reserved for direct programmatic
-			// calls. Use `.given(name, fn)` with an explicit body to forward args.
+		return new Step<any, any>(kind, title, async (ctx) => {
 			const hookCtx = this.buildHookContext();
-			const result = await macro.execute(hookCtx, undefined as any);
-			return result as any;
+			try {
+				return await macro.execute(hookCtx, ctx);
+			} catch (err: any) {
+				const prefix = `[macro "${title}"] `;
+				if (err instanceof Error) {
+					if (typeof err.message === "string" && !err.message.startsWith(prefix)) {
+						err.message = prefix + err.message;
+					}
+					throw err;
+				}
+				throw new Error(prefix + String(err));
+			}
 		});
 	}
 

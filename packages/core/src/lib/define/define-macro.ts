@@ -11,6 +11,10 @@ export interface DefineMacroInput<TContext, TInput> {
  * definitions can be referenced from feature files via `.given(title)`,
  * `.when(title)`, `.then(title)`, with the context type inferred.
  *
+ * When invoked through the DSL, the second argument of `execute` is the
+ * accumulated scenario context — the same object that inline steps receive.
+ * Macros that don't read context can keep ignoring the argument.
+ *
  * Macros are registered eagerly when the worker resolves its modules, so they
  * are available at file-import time.
  */

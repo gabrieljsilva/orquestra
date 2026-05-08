@@ -3,7 +3,7 @@ import { OrquestraAdapterExpress } from "@orquestra/adapter-express";
 import { OrquestraConsoleReporter, defineConfig } from "@orquestra/core";
 import { createApp } from "./app";
 import { PostgresOrquestraContainer, RabbitmqOrquestraContainer } from "./containers";
-import { cleanDatabaseMacro, createUserMacro } from "./macros";
+import { authenticateUserMacro, cleanDatabaseMacro, createUserMacro, persistUserMacro } from "./macros";
 import { authModule, databaseModule, isolationModule, rabbitmqModule } from "./modules";
 
 const dirname = import.meta.dirname;
@@ -20,7 +20,7 @@ export default defineConfig({
 			return adapter;
 		},
 		modules: [isolationModule, databaseModule, rabbitmqModule, authModule],
-		macros: [cleanDatabaseMacro, createUserMacro],
+		macros: [cleanDatabaseMacro, createUserMacro, persistUserMacro, authenticateUserMacro],
 	},
 	env: {
 		fromValues: {

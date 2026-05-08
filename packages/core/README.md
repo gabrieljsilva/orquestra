@@ -13,7 +13,7 @@ For the user-facing overview, see the [root README](../../README.md).
 | Symbol | Form | Purpose |
 |---|---|---|
 | `defineModule({ services, macros, containers, modules, ...hooks })` | function | Aggregator with optional shared hooks |
-| `defineMacro({ title, execute })` | function | Reusable BDD step looked up by title |
+| `defineMacro({ title, execute })` | function | Reusable BDD step looked up by title — see [Macros](#macros--input-and-output) |
 | `defineFeature(name, definition)` | function | Top-level feature declaration (Vitest-style import) |
 | `defineConfig(...)` | function | Type helper for `orquestra.config.ts` |
 | `defineSpec(...)` | function | Type helper for `orquestra.spec.ts` |
@@ -98,6 +98,41 @@ export type { OrquestraArtifact, ArtifactFeature, ArtifactScenario } from "@orqu
 export type { ArtifactAttachment, ArtifactLog, AttachmentInput, AttachmentType } from "@orquestra/core";
 export type { OrquestraConfig, GlobalOrquestraOptions, WorkerOrquestraOptions } from "@orquestra/core";
 ```
+
+---
+
+## Macros — input and output
+
+When a macro is invoked from a feature via `.given(title)` / `.when(title)` / `.then(title)`, `execute` runs with two arguments:
+
+- `ctx`: the `HookContext` — IoC container (`get`), `env`, `http`.
+- `input`: the **accumulated scenario context** — the same object that inline step callbacks receive.
+
+If `execute` returns an object, that object is merged into the scenario context and is available to the steps that follow. Macros that don't need to read or contribute context can keep ignoring both arguments.
+
+```ts
+import { defineMacro } from "@orquestra/core";
+
+const persistUser = defineMacro<{ persistedUser: User }, { user: User }>({
+  title: "that user is persisted in the database",
+  execute: async (ctx, { user }) => {
+    const persistedUser = await ctx.get(UserService).create(user);
+    return { persistedUser };
+  },
+});
+```
+
+```ts
+feature
+  .scenario("...")
+  .given("there is a user registered in database")    // → { user }
+  .given("that user is persisted in the database")    // reads { user }, adds { persistedUser }
+  .given("that user logs in")                          // reads { user }, adds { token }
+  .when(...)
+  .then(...);
+```
+
+Macros compose without depending on each other directly: each declares the minimum it needs (e.g. `{ user: User }`) and the scenario context flows through. If a macro throws, the error message is prefixed with `[macro "<title>"]` so failures are easy to trace.
 
 ---
 

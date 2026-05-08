@@ -8,9 +8,9 @@
 	},
 	"dependencies": {
 		"@faker-js/faker": "^9.9.0",
-		"@orquestra/adapter-express": "^3.0.0",
-		"@orquestra/adapter-fastify": "^3.0.0",
-		"@orquestra/core": "^3.0.0",
+		"@orquestra/adapter-express": "^3.1.0",
+		"@orquestra/adapter-fastify": "^3.1.0",
+		"@orquestra/core": "^3.1.0",
 		"@testcontainers/postgresql": "^11.5.1",
 		"@testcontainers/rabbitmq": "^11.5.1",
 		"@types/amqplib": "^0.10.5",
