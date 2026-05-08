@@ -25,7 +25,9 @@
 		"dev": "turbo run dev",
 		"changeset": "changeset",
 		"version": "changeset version",
-		"publish": "changeset publish"
+		"publish": "changeset publish",
+		"release:canary": "bash scripts/release-canary.sh",
+		"release": "changeset version && npm run build && changeset publish"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "1.8.3",
