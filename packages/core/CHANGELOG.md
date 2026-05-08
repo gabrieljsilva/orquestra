@@ -1,5 +1,32 @@
 # @orquestra/core
 
+## 3.1.0
+
+### Minor Changes
+
+- Macros invoked through the BDD DSL now receive the accumulated scenario context as the second argument of `execute`, and any object they return is merged into the scenario context for the following steps — the same semantics inline steps already had.
+
+  This lets scenarios compose narrative givens without exploding the macro registry across state combinations:
+
+  ```ts
+  const persistUser = defineMacro<{ persistedUser: User }, { user: User }>({
+    title: "that user is persisted in the database",
+    execute: async (ctx, { user }) => {
+      const persistedUser = await ctx.get(UserService).create(user);
+      return { persistedUser };
+    },
+  });
+
+  feature
+    .scenario("...")
+    .given("there is a user registered in database")    // → { user }
+    .given("that user is persisted in the database")    // reads { user }, adds { persistedUser }
+    .given("that user logs in")                          // reads { user }, adds { token }
+    .when(...);
+  ```
+
+  Backwards compatible: macros that don't read or contribute context (e.g. `cleanDatabaseMacro`) keep working unchanged. When a macro throws, the error message is now prefixed with `[macro "<title>"]` so failures are easier to trace.
+
 ## 3.0.0
 
 ### Minor Changes
@@ -13,7 +40,7 @@
   scenario.when("ai answers", async ({ user }) => {
     const r = await ai.chat({ user: user.id });
     attach({ name: "AI response", type: "markdown", data: r.text });
-    attach({ name: "Tool calls",  type: "json",     data: r.toolCalls });
+    attach({ name: "Tool calls", type: "json", data: r.toolCalls });
     log("model", r.model);
     log("token_cost", r.usage);
   });

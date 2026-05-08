@@ -1,5 +1,12 @@
 # @orquestra/vitest
 
+## 3.1.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @orquestra/core@3.1.0
+
 ## 3.0.0
 
 ### Major Changes
@@ -13,7 +20,8 @@
 
   const calc = defineFeature("Calculator");
 
-  calc.scenario("adds two positives")
+  calc
+    .scenario("adds two positives")
     .given("a calculator", () => ({ c: new Calculator() }))
     .when("I add 2 and 3", ({ c }) => ({ result: c.add(2, 3) }))
     .then("returns 5", ({ result }) => expect(result).toBe(5));

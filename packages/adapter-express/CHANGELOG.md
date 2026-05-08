@@ -1,5 +1,12 @@
 # @orquestra/adapter-express
 
+## 3.1.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @orquestra/core@3.1.0
+
 ## 3.0.0
 
 ### Patch Changes
