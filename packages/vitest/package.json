@@ -1,6 +1,6 @@
 {
 	"name": "@orquestra/vitest",
-	"version": "3.1.0",
+	"version": "3.2.0",
 	"description": "Vitest bridge for Orquestra — code-first BDD scenarios with services, modules, macros, attach/log on top of Vitest.",
 	"type": "module",
 	"main": "dist/index.esm.js",
@@ -34,7 +34,7 @@
 		"build": "rollup -c"
 	},
 	"dependencies": {
-		"@orquestra/core": "^3.1.0"
+		"@orquestra/core": "^3.2.0"
 	},
 	"peerDependencies": {
 		"vitest": ">=2.0.0"
