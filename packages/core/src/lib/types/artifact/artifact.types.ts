@@ -1,6 +1,7 @@
 import type { ArtifactAttachment, ArtifactLog } from "../attachments";
 import type { StepStatus } from "../events";
 import type { HookFailure } from "../lifecycle/hook.types";
+import type { ArtifactOpenHandle } from "./open-handles.types";
 
 export interface ArtifactPersona {
 	name: string;
@@ -68,6 +69,12 @@ export interface ArtifactFeature {
 	 * Kept for back-compat; equals `timings.totalMs` when present. */
 	durationMs?: number;
 	timings?: FeatureTimings;
+	/**
+	 * Async resources created during this feature that were still keeping the
+	 * event loop alive when the feature finished. Populated only when the run
+	 * was invoked with `--detect-open-handles` (or `detectOpenHandles: true`).
+	 */
+	openHandles?: ArtifactOpenHandle[];
 }
 
 export interface ArtifactSummary {
@@ -76,6 +83,17 @@ export interface ArtifactSummary {
 	passed: number;
 	failed: number;
 	pending: number;
+	/**
+	 * Number of features that leaked at least one async resource. Present only
+	 * when the run was invoked with open-handle detection enabled — otherwise
+	 * absent so consumers don't read `0` as "verified zero leaks".
+	 */
+	featuresWithOpenHandles?: number;
+	/**
+	 * Total leaked handles across all features. Same opt-in semantics as
+	 * `featuresWithOpenHandles`.
+	 */
+	totalOpenHandles?: number;
 }
 
 export interface ArtifactContainerTiming {

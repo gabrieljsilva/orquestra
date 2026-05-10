@@ -2,6 +2,7 @@ import type {
 	ArtifactAttachment,
 	ArtifactDomain,
 	ArtifactFeature,
+	ArtifactOpenHandle,
 	ArtifactPersona,
 	ArtifactScenario,
 	ArtifactStep,
@@ -28,6 +29,12 @@ export interface ArtifactInput {
 	/** Map of feature name → file path. Used to bind featureDurationsMs to the
 	 * artifact features (which are keyed by name). */
 	featureFilesByName?: Record<string, string>;
+	/** Per-feature leaked handles, keyed by absolute file path. */
+	openHandlesByFile?: Record<string, ArtifactOpenHandle[]>;
+	/** When true, the summary gains `featuresWithOpenHandles` and `totalOpenHandles`
+	 * — even if both are zero. When false, those fields stay absent so consumers
+	 * don't read `0` as "verified zero leaks". */
+	detectOpenHandlesEnabled?: boolean;
 }
 
 export function generateArtifact(input: ArtifactInput): OrquestraArtifact {
@@ -37,10 +44,11 @@ export function generateArtifact(input: ArtifactInput): OrquestraArtifact {
 		input.meta,
 		input.featureDurationsMs ?? {},
 		input.featureFilesByName ?? {},
+		input.openHandlesByFile ?? {},
 	);
 	const personas = buildPersonas(features);
 	const domains = buildDomains(features, input.spec);
-	const summary = buildSummary(features);
+	const summary = buildSummary(features, input.detectOpenHandlesEnabled ?? false);
 	const status = computeOverallStatus(features);
 
 	return {
@@ -65,6 +73,7 @@ function buildFeatures(
 	meta: ReadonlyArray<FeatureMeta>,
 	featureDurationsMs: Record<string, number>,
 	featureFilesByName: Record<string, string>,
+	openHandlesByFile: Record<string, ArtifactOpenHandle[]>,
 ): ArtifactFeature[] {
 	const eventsByFeature = groupBy(events, (e) => e.feature);
 	const hookEventsByFeature = groupBy(
@@ -104,6 +113,10 @@ function buildFeatures(
 			const wallClock = featureDurationsMs[file];
 			if (typeof wallClock === "number") {
 				result.durationMs = wallClock;
+			}
+			const handles = openHandlesByFile[file];
+			if (handles && handles.length > 0) {
+				result.openHandles = handles;
 			}
 		}
 
@@ -238,11 +251,13 @@ function buildDomains(features: ArtifactFeature[], spec: OrquestraSpec | null): 
 	}));
 }
 
-function buildSummary(features: ArtifactFeature[]): ArtifactSummary {
+function buildSummary(features: ArtifactFeature[], detectOpenHandlesEnabled: boolean): ArtifactSummary {
 	let totalScenarios = 0;
 	let passed = 0;
 	let failed = 0;
 	let pending = 0;
+	let featuresWithOpenHandles = 0;
+	let totalOpenHandles = 0;
 
 	for (const feature of features) {
 		for (const scenario of feature.scenarios) {
@@ -251,15 +266,25 @@ function buildSummary(features: ArtifactFeature[]): ArtifactSummary {
 			else if (scenario.status === "failed") failed += 1;
 			else pending += 1;
 		}
+		const handles = feature.openHandles;
+		if (handles && handles.length > 0) {
+			featuresWithOpenHandles += 1;
+			totalOpenHandles += handles.length;
+		}
 	}
 
-	return {
+	const summary: ArtifactSummary = {
 		totalFeatures: features.length,
 		totalScenarios,
 		passed,
 		failed,
 		pending,
 	};
+	if (detectOpenHandlesEnabled) {
+		summary.featuresWithOpenHandles = featuresWithOpenHandles;
+		summary.totalOpenHandles = totalOpenHandles;
+	}
+	return summary;
 }
 
 function computeOverallStatus(features: ArtifactFeature[]): StepStatus {

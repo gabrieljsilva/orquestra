@@ -30,6 +30,8 @@ export interface ParallelRunnerOptions {
 	workerMemoryLimitMb?: number;
 	/** Debug mode: force concurrency=1, emit source maps, fork worker with --inspect-brk. */
 	debug?: boolean;
+	/** Track + report async resources kept alive at the end of each feature. Off by default. */
+	detectOpenHandles?: boolean;
 	/** Time spent before the runner — discovery, loadConfig, loadSpec, jiti warmup. */
 	collectionMs?: number;
 	/** Per-step breakdown of `collectionMs`, for performance debugging. */
@@ -134,6 +136,7 @@ export class ParallelRunner {
 				featureTimeoutMs: this.options.featureTimeoutMs,
 				workerMemoryLimitMb: this.options.workerMemoryLimitMb,
 				debug: this.options.debug,
+				detectOpenHandles: this.options.detectOpenHandles,
 			});
 			workerResult = await manager.run();
 		} finally {
@@ -154,6 +157,8 @@ export class ParallelRunner {
 			spec: this.options.spec,
 			featureDurationsMs: workerResult.featureDurationsMs,
 			featureFilesByName: workerResult.featureFilesByName,
+			openHandlesByFile: workerResult.openHandlesByFile,
+			detectOpenHandlesEnabled: this.options.detectOpenHandles ?? false,
 		});
 
 		appendOrphanFiles(artifact, workerResult.failedFiles, workerResult.pendingFiles);

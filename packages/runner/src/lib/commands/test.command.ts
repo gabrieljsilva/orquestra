@@ -43,9 +43,13 @@ export const testCommand = defineCommand({
 		},
 		debug: {
 			type: "boolean",
-			description:
-				"Run a single worker with --inspect-brk and inline source maps. Forces concurrency=1.",
+			description: "Run a single worker with --inspect-brk and inline source maps. Forces concurrency=1.",
 			default: false,
+		},
+		detectOpenHandles: {
+			type: "boolean",
+			description:
+				"Track async resources created during each feature; report those that still keep the event loop alive when the feature ends. Diagnostic only — never fails the run. Overrides config.detectOpenHandles.",
 		},
 		filter: {
 			type: "positional",
@@ -112,6 +116,10 @@ export const testCommand = defineCommand({
 		);
 		const featureTimeoutMs = args.featureTimeout ? Number.parseInt(args.featureTimeout, 10) : slowestHookBudgetMs * 5;
 		const workerMemoryLimitMb = config.workerMemoryLimitMb;
+		// CLI wins: `--detect-open-handles` and `--no-detect-open-handles`
+		// override config.detectOpenHandles. Citty only sets `args.detectOpenHandles`
+		// when the flag is passed, so `undefined` means "fall back to config".
+		const detectOpenHandles = args.detectOpenHandles ?? config.detectOpenHandles ?? false;
 
 		console.log(`[orquestra] running ${featureFiles.length} feature file(s) with concurrency=${concurrency}\n`);
 
@@ -129,6 +137,7 @@ export const testCommand = defineCommand({
 			featureTimeoutMs,
 			workerMemoryLimitMb,
 			debug,
+			detectOpenHandles,
 			collectionMs,
 			collection,
 		});

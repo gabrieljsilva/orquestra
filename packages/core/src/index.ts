@@ -82,6 +82,8 @@ export {
 	ArtifactServerBootStats,
 	ArtifactAttachment,
 	ArtifactLog,
+	ArtifactOpenHandle,
+	ArtifactOpenHandleFrame,
 	AttachmentEvent,
 	AttachmentInput,
 	AttachmentType,

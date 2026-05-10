@@ -6,6 +6,7 @@ import { loadConfig } from "./lib/loaders/config.loader";
 import { configToWorkerOrquestraOptions } from "./lib/runner/config-mapper";
 import type { MainToWorkerMessage, WorkerToMainMessage } from "./lib/runner/ipc-protocol";
 import { readHeapUsedBytes } from "./lib/runner/memory-monitor";
+import { OpenHandlesTracker } from "./lib/runner/open-handles";
 import { resolveOutputDir } from "./lib/runner/output-dir";
 import { resolveScenarioTimeout, runScenarioBody } from "./lib/runner/scenario-runner";
 import { createOrquestraJiti } from "./lib/transform";
@@ -51,6 +52,12 @@ async function main() {
 
 	process.env.ORQUESTRA_WORKER_ID = workerId;
 
+	// Install the async-hooks tracker as early as possible so the per-feature
+	// snapshot taken before `jiti.import(file)` already covers anything boot
+	// (config load, IPC, transform setup) leaves alive.
+	const tracker =
+		process.env.ORQUESTRA_DETECT_OPEN_HANDLES === "1" ? new OpenHandlesTracker(process.cwd()).install() : null;
+
 	const { config, configDir } = await loadConfig(configPath, { tsconfigPath });
 
 	const debugMode = process.env.ORQUESTRA_DEBUG === "1";
@@ -83,6 +90,19 @@ async function main() {
 		let tScenariosEnd = 0;
 		let tTeardownStart = 0;
 
+		// Snapshot async resources alive at the start of the feature so the
+		// per-feature delta excludes boot-time / cross-feature inheritance.
+		const handlesBefore = tracker?.snapshot();
+
+		// Sent in every exit path of processFeature — the catastrophic
+		// initOrquestra failure below is exactly the kind of run a user wants
+		// to debug, so handles leaked there must not be silently dropped.
+		const flushOpenHandles = (): void => {
+			if (!tracker || !handlesBefore) return;
+			const handles = tracker.reportSince(handlesBefore);
+			if (handles.length > 0) send({ type: "open-handles:report", file, handles });
+		};
+
 		restoreEnv(envSnapshot);
 
 		resetOrquestraInstance();
@@ -91,6 +111,7 @@ async function main() {
 			orq = initOrquestra(configToWorkerOrquestraOptions(config));
 		} catch (err) {
 			const tEnd = Date.now();
+			flushOpenHandles();
 			send({
 				type: "feature:failed",
 				file,
@@ -186,6 +207,10 @@ async function main() {
 			totalMs: tDone - t0,
 		};
 
+		// Sent before feature:done/failed so the manager has the diagnostic
+		// associated with the file before any subsequent assignment arrives.
+		flushOpenHandles();
+
 		const heapUsedBytes = reportHeap ? readHeapUsedBytes() : undefined;
 		if (firstError) {
 			send({ type: "feature:failed", file, error: firstError, timings, heapUsedBytes });
@@ -210,6 +235,7 @@ async function main() {
 		} catch {
 			// errors are already reported via IPC by processFeature
 		}
+		tracker?.dispose();
 		send({ type: "worker:done" });
 		process.exit(code);
 	};

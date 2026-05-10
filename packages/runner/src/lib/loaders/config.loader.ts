@@ -88,14 +88,16 @@ export function validateConfig(config: unknown): asserts config is OrquestraConf
 		}
 	}
 
+	if (cfg.detectOpenHandles !== undefined && typeof cfg.detectOpenHandles !== "boolean") {
+		throw new Error(`detectOpenHandles must be a boolean, got: ${cfg.detectOpenHandles}`);
+	}
+
 	if (cfg.global !== undefined && typeof cfg.global === "object" && cfg.global !== null) {
 		const g = cfg.global as Record<string, unknown>;
 		for (const key of ["beforeProvision", "afterProvision", "beforeDeprovision", "afterDeprovision"] as const) {
 			const value = g[key];
 			if (value === undefined) continue;
-			const ok =
-				typeof value === "function" ||
-				(Array.isArray(value) && value.every((v) => typeof v === "function"));
+			const ok = typeof value === "function" || (Array.isArray(value) && value.every((v) => typeof v === "function"));
 			if (!ok) {
 				throw new Error(`global.${key} must be a function or an array of functions`);
 			}

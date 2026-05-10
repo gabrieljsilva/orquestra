@@ -1,4 +1,4 @@
-import type { FeatureMeta, FeatureTimings, HookEvent, StepEvent } from "@orquestra/core";
+import type { ArtifactOpenHandle, FeatureMeta, FeatureTimings, HookEvent, StepEvent } from "@orquestra/core";
 
 export type MainToWorkerMessage = { type: "feature:assign"; file: string } | { type: "shutdown" };
 
@@ -15,6 +15,7 @@ export type WorkerToMainMessage =
 			timings?: FeatureTimings;
 			heapUsedBytes?: number;
 	  }
+	| { type: "open-handles:report"; file: string; handles: ArtifactOpenHandle[] }
 	| { type: "worker:done" };
 
 export interface WorkerSpawnOptions {

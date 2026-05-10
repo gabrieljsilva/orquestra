@@ -116,6 +116,57 @@ A scenario timeout fails the affected scenario and still runs its
 to run. Hooks honor the same `withTimeout` semantics — exceeding the budget
 is reported as a hook failure, not a worker crash.
 
+## Detecting open handles
+
+Pass `--detect-open-handles` (or set `detectOpenHandles: true` in the
+config) to track async resources (`setInterval`, sockets, file watchers,
+file descriptors) that a feature opens but never closes. After each
+feature finishes, the runner reports any handle that was created during
+the feature and still keeps the event loop alive.
+
+```bash
+orquestra test --detect-open-handles
+```
+
+```ts
+// orquestra.config.ts
+export default defineConfig({
+  detectOpenHandles: true,
+});
+```
+
+The CLI flag wins: pass `--no-detect-open-handles` to force-off when the
+config has it on.
+
+Each leak shows up on stderr in real time, prefixed with the worker id
+and feature file:
+
+```
+[orquestra][worker 0][redis-cache.feature.ts] 1 open handle kept the event loop alive after this feature:
+  # Timeout
+    /path/to/services/redis-client.ts:42:5 - this.heartbeat = setInterval(() => ping(), 1000);
+```
+
+The same data is serialized into `artifact.json`:
+
+- per feature, under `features[].openHandles`,
+- aggregated, under `summary.featuresWithOpenHandles` and
+  `summary.totalOpenHandles` (both fields appear only when detection was
+  enabled — they are omitted in normal runs so consumers don't read `0`
+  as "verified zero leaks").
+
+Detection is **diagnostic only** — leaks never fail the run. Cost is
+non-trivial (`async_hooks` capture stack traces for every async resource),
+so leave it off for normal runs and turn it on while investigating.
+
+> **Heads up — `artifact.json` is often committed.** Each leaked frame
+> embeds the source line where the resource was created (truncated to 500
+> characters). If a feature opens a resource on a line that also contains
+> a hardcoded secret (connection string, token, API key), that fragment
+> ends up in `.orquestra/artifact.json`. Review the artifact before
+> committing when this flag is on, and prefer to keep secrets out of
+> source code regardless.
+
 ## Global hooks (config-time, main process)
 
 Global hooks run **once per run, in the main process**, around container

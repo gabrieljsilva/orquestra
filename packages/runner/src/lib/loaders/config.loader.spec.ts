@@ -46,6 +46,23 @@ describe("validateConfig — V3 surface", () => {
 		});
 	});
 
+	describe("detectOpenHandles", () => {
+		it("accepts true and false", () => {
+			expect(() => validateConfig({ detectOpenHandles: true })).not.toThrow();
+			expect(() => validateConfig({ detectOpenHandles: false })).not.toThrow();
+		});
+
+		it("undefined is fine — feature is opt-in", () => {
+			expect(() => validateConfig({ detectOpenHandles: undefined })).not.toThrow();
+		});
+
+		it("rejects non-booleans (strings, numbers, objects)", () => {
+			expect(() => validateConfig({ detectOpenHandles: "yes" })).toThrow(/detectOpenHandles must be a boolean/);
+			expect(() => validateConfig({ detectOpenHandles: 1 })).toThrow(/detectOpenHandles must be a boolean/);
+			expect(() => validateConfig({ detectOpenHandles: {} })).toThrow(/detectOpenHandles must be a boolean/);
+		});
+	});
+
 	describe("global hooks", () => {
 		it.each(["beforeProvision", "afterProvision", "beforeDeprovision", "afterDeprovision"] as const)(
 			"global.%s accepts a single function",
@@ -57,9 +74,7 @@ describe("validateConfig — V3 surface", () => {
 		it.each(["beforeProvision", "afterProvision", "beforeDeprovision", "afterDeprovision"] as const)(
 			"global.%s accepts an array of functions",
 			(key) => {
-				expect(() =>
-					validateConfig({ global: { [key]: [async () => {}, async () => {}] } }),
-				).not.toThrow();
+				expect(() => validateConfig({ global: { [key]: [async () => {}, async () => {}] } })).not.toThrow();
 			},
 		);
 
@@ -70,9 +85,7 @@ describe("validateConfig — V3 surface", () => {
 				expect(() => validateConfig({ global: { [key]: "not a fn" } })).toThrow(re);
 				expect(() => validateConfig({ global: { [key]: 42 } })).toThrow(re);
 				expect(() => validateConfig({ global: { [key]: { not: "callable" } } })).toThrow(re);
-				expect(() =>
-					validateConfig({ global: { [key]: [async () => {}, "stowaway"] } }),
-				).toThrow(re);
+				expect(() => validateConfig({ global: { [key]: [async () => {}, "stowaway"] } })).toThrow(re);
 			},
 		);
 
@@ -83,9 +96,7 @@ describe("validateConfig — V3 surface", () => {
 
 	describe("flat-vs-{global,worker} mutual exclusion (preserved from v2.next)", () => {
 		it("mixing both shapes is rejected", () => {
-			expect(() =>
-				validateConfig({ global: {}, worker: {}, plugins: ["x"] }),
-			).toThrow(/Cannot mix/);
+			expect(() => validateConfig({ global: {}, worker: {}, plugins: ["x"] })).toThrow(/Cannot mix/);
 		});
 
 		it("global+worker without flat is fine", () => {

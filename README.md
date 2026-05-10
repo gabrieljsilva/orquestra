@@ -397,6 +397,30 @@ to legacy behavior — no overhead in default runs.
 
 ---
 
+## Detecting open handles (opt-in)
+
+When a feature opens an async resource (`setInterval`, socket, watcher,
+file descriptor) but never closes it, the worker stays alive longer than
+necessary and the leak hides in CI. Pass `--detect-open-handles` (or set
+`detectOpenHandles: true` in the config) to track resources created
+during each feature and report the ones still keeping the event loop
+alive when the feature ends.
+
+```bash
+npx orquestra test --detect-open-handles
+```
+
+Reports include the resource type, file:line of creation, and the source
+line. Output goes to stderr (per worker, per feature) **and** lands in
+`artifact.json` under `features[].openHandles` plus `summary.featuresWithOpenHandles`
+/ `summary.totalOpenHandles` — useful for project-health dashboards.
+
+Diagnostic only — leaks never fail the run. `async_hooks` capture has a
+real cost, so leave it off for normal runs. Full details in
+[`packages/runner/README.md`](packages/runner/README.md#detecting-open-handles).
+
+---
+
 ## Debugging
 
 Set breakpoints in `.feature.ts` and run:

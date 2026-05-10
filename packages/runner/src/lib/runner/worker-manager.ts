@@ -1,6 +1,6 @@
 import { type ChildProcess, fork } from "node:child_process";
-import { resolve } from "node:path";
-import type { FeatureMeta, FeatureTimings, HookEvent, StepEvent } from "@orquestra/core";
+import { basename, resolve } from "node:path";
+import type { ArtifactOpenHandle, FeatureMeta, FeatureTimings, HookEvent, StepEvent } from "@orquestra/core";
 import type { MainToWorkerMessage, WorkerToMainMessage } from "./ipc-protocol";
 
 export interface WorkerManagerOptions {
@@ -30,6 +30,12 @@ export interface WorkerManagerOptions {
 	 * `--debug` on the CLI; expects concurrency=1 to be sane.
 	 */
 	debug?: boolean;
+	/**
+	 * When `true`, each worker installs an `async_hooks` tracker and reports
+	 * async resources still alive when a feature ends. Reports come back via
+	 * IPC, are printed to stderr in real time, and end up in the artifact.
+	 */
+	detectOpenHandles?: boolean;
 }
 
 export interface WorkerManagerResult {
@@ -47,6 +53,12 @@ export interface WorkerManagerResult {
 	firstStepAt: number | null;
 	/** Timestamp (ms epoch) of the last step:event received, or null if none. */
 	lastStepAt: number | null;
+	/**
+	 * Open-handle reports keyed by absolute feature file path. Empty `{}` when
+	 * detection is off; populated only for files where at least one handle
+	 * leaked.
+	 */
+	openHandlesByFile: Record<string, ArtifactOpenHandle[]>;
 }
 
 interface WorkerSlot {
@@ -81,6 +93,7 @@ export class WorkerManager {
 	private featureFilesByName: Record<string, string> = {};
 	private firstStepAt: number | null = null;
 	private lastStepAt: number | null = null;
+	private openHandlesByFile: Record<string, ArtifactOpenHandle[]> = {};
 
 	constructor(options: WorkerManagerOptions) {
 		this.options = options;
@@ -156,6 +169,7 @@ export class WorkerManager {
 			workerCount: this.workers.length,
 			firstStepAt: this.firstStepAt,
 			lastStepAt: this.lastStepAt,
+			openHandlesByFile: { ...this.openHandlesByFile },
 		};
 	}
 
@@ -193,6 +207,7 @@ export class WorkerManager {
 				...process.env,
 				ORQUESTRA_WORKER_ID: String(id),
 				...(this.options.debug ? { ORQUESTRA_DEBUG: "1" } : {}),
+				...(this.options.detectOpenHandles ? { ORQUESTRA_DETECT_OPEN_HANDLES: "1" } : {}),
 			},
 			execArgv,
 		});
@@ -336,6 +351,22 @@ export class WorkerManager {
 				}
 				break;
 
+			case "open-handles:report":
+				// Defense: a misbehaving / corrupted worker could send a `file`
+				// that is not the one currently assigned to this slot, poisoning
+				// another feature's `openHandles` entry in the artifact. The
+				// honest worker always sends its current file, so a mismatch
+				// indicates an IPC bug or compromise — drop the report.
+				if (msg.file !== slot.currentFile) {
+					console.error(
+						`[orquestra] worker ${slot.id} reported open handles for "${msg.file}" but is processing "${slot.currentFile}" — dropping.`,
+					);
+					break;
+				}
+				this.openHandlesByFile[msg.file] = msg.handles;
+				printOpenHandlesReport(slot.id, msg.file, msg.handles);
+				break;
+
 			case "worker:done":
 				slot.alive = false;
 				break;
@@ -431,6 +462,47 @@ export function resolveExecArgv(input: ResolveExecArgvInput): string[] {
 
 	const parentInspect = input.parentExecArgv.filter((a) => a.startsWith("--inspect"));
 	return [...parentInspect, ...base];
+}
+
+/**
+ * Strips C0 (0x00–0x1F except `\t`) and C1 (0x7F–0x9F) control characters
+ * before sending arbitrary report fields to stderr. Source lines from
+ * minified bundles or attacker-influenced code can carry ANSI/OSC escapes
+ * that would otherwise hijack the user's terminal title, clear the screen,
+ * or smuggle a phishing hyperlink past unsuspecting eyes.
+ */
+export function stripTerminalEscapes(input: string): string {
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping these is the point.
+	return input.replace(/[\x00-\x08\x0B-\x1F\x7F-\x9F]/g, "");
+}
+
+/**
+ * Prints an open-handles report to stderr in real time, as soon as the worker
+ * delivers it. Each handle becomes a multi-line block prefixed with the worker
+ * id and feature basename, so concurrent workers' output stays disambiguated.
+ */
+export function printOpenHandlesReport(
+	workerId: number,
+	file: string,
+	handles: ReadonlyArray<ArtifactOpenHandle>,
+): void {
+	if (handles.length === 0) return;
+	const tag = `[orquestra][worker ${workerId}][${basename(file)}]`;
+	const noun = handles.length === 1 ? "handle" : "handles";
+	console.error(`\n${tag} ${handles.length} open ${noun} kept the event loop alive after this feature:`);
+	for (const handle of handles) {
+		console.error(`  # ${stripTerminalEscapes(handle.type)}`);
+		if (handle.stack.length === 0) {
+			console.error("    (stack unavailable)");
+			continue;
+		}
+		for (const frame of handle.stack) {
+			const loc =
+				frame.column !== undefined ? `${frame.file}:${frame.line}:${frame.column}` : `${frame.file}:${frame.line}`;
+			const tail = frame.source ? ` - ${stripTerminalEscapes(frame.source)}` : "";
+			console.error(`    ${loc}${tail}`);
+		}
+	}
 }
 
 export interface ShouldRecycleWorkerInput {

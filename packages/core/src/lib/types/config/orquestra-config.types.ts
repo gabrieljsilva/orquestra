@@ -83,6 +83,20 @@ export interface OrquestraConfig {
 	 */
 	workerMemoryLimitMb?: number;
 
+	/**
+	 * When `true`, each worker installs an `async_hooks` tracker and reports
+	 * async resources (timers, sockets, watchers, file descriptors) that were
+	 * created during a feature and still kept the event loop alive when the
+	 * feature finished. Reports are written to stderr and serialized into the
+	 * `artifact.json` (per feature + summary aggregates).
+	 *
+	 * Diagnostic only — never fails the run. Cost is real (`async_hooks`
+	 * captures stack traces); leave off for normal runs and turn on while
+	 * investigating leaks. Overridden by the CLI flag `--detect-open-handles`
+	 * / `--no-detect-open-handles`.
+	 */
+	detectOpenHandles?: boolean;
+
 	spec?: string;
 
 	outputDir?: string;
